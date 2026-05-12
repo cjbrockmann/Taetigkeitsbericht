@@ -97,6 +97,7 @@ class Krankmeldung(BaseModel):
     krank_von: date = Field(description="Krank von")
     krank_bis: date = Field(description="Krank bis")
     krankmeldungstage: int = Field(description="Krankmeldungstage", ge=0)
+    anmerkung: Optional[str] = Field(default=None, max_length=80)
 
     @model_validator(mode="after")
     def pruefe_datumsbereich(self) -> "Krankmeldung":

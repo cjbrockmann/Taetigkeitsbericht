@@ -44,6 +44,7 @@ class KrankmeldungViewModel(QObject):
         krank_von_text: str,
         krank_bis_text: str,
         krankmeldungstage_text: str,
+        eintrag_id: int | None = None,
     ) -> None:
         kv = krank_von_text.strip()
         kb = krank_bis_text.strip()
@@ -56,13 +57,16 @@ class KrankmeldungViewModel(QObject):
             raise ValueError("Anzahl Tage darf nicht leer sein.")
         krankmeldungstage = int(stage_text)
         eintrag = Krankmeldung(
-            id=None,
+            id=eintrag_id,
             krank_von=krank_von,
             krank_bis=krank_bis,
             krankmeldungstage=krankmeldungstage,
         )
         self._anwendung.erfasse(eintrag)
-        self.status_changed.emit("Krankmeldung gespeichert.")
+        if eintrag_id is None:
+            self.status_changed.emit("Krankmeldung gespeichert.")
+        else:
+            self.status_changed.emit("Krankmeldung aktualisiert.")
 
     def loesche_nach_id(self, eintrag_id: int | None) -> bool:
         if eintrag_id is None:

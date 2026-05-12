@@ -21,3 +21,20 @@ STANDARD_TABLE_VIEW_STYLESHEET = (
     "color: #000000;"
     "}"
 )
+
+# Kein erzwungenes color bei :selected, damit Delegate/Modell die Schriftfarbe setzen koennen
+# (ungespeicherte Zeilen rot, auch wenn markiert).
+ZEITEINTRAG_TABLE_VIEW_STYLESHEET = (
+    "QTableView::item:hover:!selected {"
+    "background-color: #ececec;"
+    "}"
+    "QTableView::item:selected:hover {"
+    "background-color: #fff9c4;"
+    "}"
+    "QTableView::item:selected {"
+    "background-color: #fff9c4;"
+    "}"
+    "QTableView::item:selected:!active {"
+    "background-color: #fff9c4;"
+    "}"
+)

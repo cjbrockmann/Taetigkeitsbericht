@@ -170,7 +170,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
             return None
         if role == Qt.ForegroundRole:
             if index.row() in self._dirty_rows:
-                return QColor("#b71c1c")
+                return QColor("#c62828")
             return QColor("#000000")
         if role not in (Qt.DisplayRole, Qt.EditRole):
             return None

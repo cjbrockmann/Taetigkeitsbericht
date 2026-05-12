@@ -31,7 +31,7 @@ from App.app_config import ZeiteintragExcelExportSettings
 from External.Presentation.Desktop.feiertag_view import FeiertagView
 from External.Presentation.Desktop.krankmeldung_view import KrankmeldungView
 from External.Presentation.Desktop.stundenplan_view import StundenplanView
-from External.Presentation.Desktop.table_view_styles import STANDARD_TABLE_VIEW_STYLESHEET
+from External.Presentation.Desktop.table_view_styles import ZEITEINTRAG_TABLE_VIEW_STYLESHEET
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
 from External.Presentation.Desktop.zeiteintrag_table_model import ZeiteintragTableModel
 from External.Presentation.Desktop.zeiteintrag_view_model import ZeiteintragViewModel
@@ -64,13 +64,17 @@ class LiveCommitDelegate(QStyledItemDelegate):
         return editor
 
     def paint(self, painter, option, index):  # noqa: N802
-        paint_option = option
         model = index.model()
-        if hasattr(model, "is_row_dirty"):
-            paint_option = type(option)(option)
-            text_color = "#b71c1c" if model.is_row_dirty(index.row()) else "#000000"
-            paint_option.palette.setColor(QPalette.Text, text_color)
-            paint_option.palette.setColor(QPalette.HighlightedText, text_color)
+        if not hasattr(model, "is_row_dirty"):
+            super().paint(painter, option, index)
+            return
+        paint_option = type(option)(option)
+        if model.is_row_dirty(index.row()):
+            farbe = QColor("#c62828")
+        else:
+            farbe = QColor("#000000")
+        paint_option.palette.setColor(QPalette.ColorRole.Text, farbe)
+        paint_option.palette.setColor(QPalette.ColorRole.HighlightedText, farbe)
         super().paint(painter, paint_option, index)
 
     def setModelData(self, editor, model, index):  # noqa: N802
@@ -100,9 +104,14 @@ class WochentagMitSternDelegate(LiveCommitDelegate):
         self.initStyleOption(opt, index)
 
         model = index.model()
-        if model is not None and hasattr(model, "is_row_dirty") and model.is_row_dirty(index.row()):
-            opt.palette.setColor(QPalette.ColorRole.Text, QColor("#b71c1c"))
-            opt.palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#b71c1c"))
+        if model is not None and hasattr(model, "is_row_dirty"):
+            if model.is_row_dirty(index.row()):
+                opt.palette.setColor(QPalette.ColorRole.Text, QColor("#c62828"))
+                opt.palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#c62828"))
+            else:
+                schwarz = QColor("#000000")
+                opt.palette.setColor(QPalette.ColorRole.Text, schwarz)
+                opt.palette.setColor(QPalette.ColorRole.HighlightedText, schwarz)
 
         widget = option.widget
         style = widget.style() if widget is not None else None
@@ -306,7 +315,7 @@ class ZeiteintragWindow(QMainWindow):
         self._table.setShowGrid(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self._table.setStyleSheet(STANDARD_TABLE_VIEW_STYLESHEET)
+        self._table.setStyleSheet(ZEITEINTRAG_TABLE_VIEW_STYLESHEET)
         horizontal_header = self._table.horizontalHeader()
         horizontal_header.setStretchLastSection(False)
         horizontal_header.resizeSection(0, 50)
