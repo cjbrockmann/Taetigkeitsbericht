@@ -28,8 +28,10 @@ from PySide6.QtWidgets import (
 )
 
 from App.app_config import ZeiteintragExcelExportSettings
+from External.Presentation.Desktop.betriebsferien_view import BetriebsferienView
 from External.Presentation.Desktop.feiertag_view import FeiertagView
 from External.Presentation.Desktop.krankmeldung_view import KrankmeldungView
+from External.Presentation.Desktop.schulferien_view import SchulferienView
 from External.Presentation.Desktop.stundenplan_view import StundenplanView
 from External.Presentation.Desktop.table_view_styles import ZEITEINTRAG_TABLE_VIEW_STYLESHEET
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
@@ -234,6 +236,8 @@ class ZeiteintragWindow(QMainWindow):
         feiertag_view: FeiertagView,
         urlaubsantrag_view: UrlaubsantragView,
         krankmeldung_view: KrankmeldungView,
+        betriebsferien_view: BetriebsferienView,
+        schulferien_view: SchulferienView,
         excel_export: ZeiteintragExcelExportSettings | None = None,
         ausgeblendete_spalten: Sequence[int] | None = None,
     ) -> None:
@@ -243,6 +247,8 @@ class ZeiteintragWindow(QMainWindow):
         self._feiertag_view = feiertag_view
         self._urlaubsantrag_view = urlaubsantrag_view
         self._krankmeldung_view = krankmeldung_view
+        self._betriebsferien_view = betriebsferien_view
+        self._schulferien_view = schulferien_view
         self._excel_export = excel_export or ZeiteintragExcelExportSettings()
         self._ausgeblendete_spalten = tuple(ausgeblendete_spalten or ())
         self._has_unsaved_changes = False
@@ -348,6 +354,8 @@ class ZeiteintragWindow(QMainWindow):
         self._tab_widget.addTab(self._feiertag_view, "Feiertage")
         self._tab_widget.addTab(self._urlaubsantrag_view, "Urlaub")
         self._tab_widget.addTab(self._krankmeldung_view, "Krankmeldung")
+        self._tab_widget.addTab(self._betriebsferien_view, "Betriebsferien")
+        self._tab_widget.addTab(self._schulferien_view, "Schulferien")
         self.setCentralWidget(self._tab_widget)
 
         self._laden_button.clicked.connect(self._on_laden)

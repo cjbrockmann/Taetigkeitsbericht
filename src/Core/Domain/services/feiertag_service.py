@@ -34,7 +34,7 @@ class FeiertagService:
         if jahr < 1900:
             raise ValueError("jahr muss >= 1900 sein.")
 
-        config_path = Path(__file__).resolve().parents[3] / "feiertag.toml"
+        config_path = Path(__file__).resolve().parents[3] / "external_api.toml"
         with config_path.open("rb") as config_file:
             config = tomllib.load(config_file)
         api_config = config.get("feiertage_api", {})

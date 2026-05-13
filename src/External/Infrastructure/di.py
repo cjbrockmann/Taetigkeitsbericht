@@ -5,14 +5,18 @@ from dataclasses import dataclass
 from injector import Module, provider
 from sqlmodel import Session
 
+from Core.Domain.interfaces.betriebsferien_repository_interface import IBetriebsferienRepository
 from Core.Domain.interfaces.feiertag_repository_interface import IFeiertagRepository
 from Core.Domain.interfaces.krankmeldung_repository_interface import IKrankmeldungRepository
+from Core.Domain.interfaces.schulferien_repository_interface import ISchulferienRepository
 from Core.Domain.interfaces.stundenplan_repository_interface import IStundenplanRepository
 from Core.Domain.interfaces.urlaubsantrag_repository_interface import IUrlaubsantragRepository
 from Core.Domain.interfaces.zeiteintrag_repository_interface import IZeiteintragRepository
 from External.Infrastructure.database import create_sqlite_engine, init_db
+from External.Infrastructure.repositories.betriebsferien_sqlmodel_repository import SqlBetriebsferienRepository
 from External.Infrastructure.repositories.feiertag_sqlmodel_repository import SqlFeiertagRepository
 from External.Infrastructure.repositories.krankmeldung_sqlmodel_repository import SqlKrankmeldungRepository
+from External.Infrastructure.repositories.schulferien_sqlmodel_repository import SqlSchulferienRepository
 from External.Infrastructure.repositories.stundenplan_sqlmodel_repository import SqlStundenplanRepository
 from External.Infrastructure.repositories.urlaubsantrag_sqlmodel_repository import SqlUrlaubsantragRepository
 from External.Infrastructure.repositories.zeiteintrag_sqlmodel_repository import SqlZeiteintragRepository
@@ -49,3 +53,11 @@ class InfrastructureDIModule(Module):
     @provider
     def provide_krankmeldung_repository(self, session: Session) -> IKrankmeldungRepository:
         return SqlKrankmeldungRepository(session)
+
+    @provider
+    def provide_betriebsferien_repository(self, session: Session) -> IBetriebsferienRepository:
+        return SqlBetriebsferienRepository(session)
+
+    @provider
+    def provide_schulferien_repository(self, session: Session) -> ISchulferienRepository:
+        return SqlSchulferienRepository(session)

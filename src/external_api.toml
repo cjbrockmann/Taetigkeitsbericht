@@ -1,0 +1,11 @@
+[feiertage_api]
+url = "https://feiertage-api.de/api/"
+bundesland = "Hessen"
+bundesland_code = "HE"
+
+[schulferien_api]
+url = "https://schulferien-api.de/api/"
+bundesland = "Hessen"
+bundesland_code = "HE"
+
+

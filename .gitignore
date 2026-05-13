@@ -204,6 +204,7 @@ cython_debug/
 # AI tool configuration
 .aiignore
 .claudeignore
+.cursor/
 
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
@@ -225,3 +226,5 @@ jira_epics_stories_tasks.md
 jira_imports.csv
 marke_id.md
 taetigkeitsbericht.db
+
+

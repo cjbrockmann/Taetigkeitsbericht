@@ -2,20 +2,26 @@ from __future__ import annotations
 
 from injector import Binder, Module, provider, singleton
 
+from Core.Application.betriebsferien_anwendung import BetriebsferienAnwendung
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.krankmeldung_anwendung import KrankmeldungAnwendung
+from Core.Application.schulferien_anwendung import SchulferienAnwendung
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
 from Core.Application.urlaubsantrag_anwendung import UrlaubsantragAnwendung
 from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung, ZeiteintragAnwendungDTO
 from Core.Domain.interfaces.auth_interface import IAuthService
+from Core.Domain.interfaces.betriebsferien_repository_interface import IBetriebsferienRepository
 from Core.Domain.interfaces.feiertag_repository_interface import IFeiertagRepository
 from Core.Domain.interfaces.krankmeldung_repository_interface import IKrankmeldungRepository
+from Core.Domain.interfaces.schulferien_repository_interface import ISchulferienRepository
 from Core.Domain.interfaces.stundenplan_repository_interface import IStundenplanRepository
 from Core.Domain.interfaces.urlaubsantrag_repository_interface import IUrlaubsantragRepository
 from Core.Domain.interfaces.zeiteintrag_repository_interface import IZeiteintragRepository
 from Core.Domain.services.auth_service import AuthService
+from Core.Domain.services.betriebsferien_service import BetriebsferienService
 from Core.Domain.services.feiertag_service import FeiertagService
 from Core.Domain.services.krankmeldung_service import KrankmeldungService
+from Core.Domain.services.schulferien_service import SchulferienService
 from Core.Domain.services.stundenplan_service import StundenplanService
 from Core.Domain.services.urlaubsantrag_service import UrlaubsantragService
 from Core.Domain.services.zeiteintrag_service import ZeiteintragService
@@ -52,6 +58,18 @@ class ApplicationDIModule(Module):
         self, repository: IKrankmeldungRepository
     ) -> KrankmeldungService:
         return KrankmeldungService(repository)
+
+    @provider
+    def provide_betriebsferien_service(
+        self, repository: IBetriebsferienRepository
+    ) -> BetriebsferienService:
+        return BetriebsferienService(repository)
+
+    @provider
+    def provide_schulferien_service(
+        self, repository: ISchulferienRepository
+    ) -> SchulferienService:
+        return SchulferienService(repository)
 
     @singleton
     @provider
@@ -103,3 +121,17 @@ class ApplicationDIModule(Module):
         self, service: KrankmeldungService
     ) -> KrankmeldungAnwendung:
         return KrankmeldungAnwendung(service)
+
+    @singleton
+    @provider
+    def provide_betriebsferien_anwendung(
+        self, service: BetriebsferienService
+    ) -> BetriebsferienAnwendung:
+        return BetriebsferienAnwendung(service)
+
+    @singleton
+    @provider
+    def provide_schulferien_anwendung(
+        self, service: SchulferienService
+    ) -> SchulferienAnwendung:
+        return SchulferienAnwendung(service)

@@ -61,3 +61,23 @@ class KrankmeldungTable(SQLModel, table=True):
     krank_von: date
     krank_bis: date
     krankmeldungstage: int = Field(ge=0)
+
+
+class BetriebsferienTable(SQLModel, table=True):
+    __tablename__ = "betriebsferien"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    datum_von: date
+    datum_bis: date
+    betriebsferienname: str = Field(max_length=80)
+    anmerkung: Optional[str] = Field(default=None, max_length=80)
+
+
+class SchulferienTable(SQLModel, table=True):
+    __tablename__ = "schulferien"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    datum_von: date
+    datum_bis: date
+    schulferienname: str = Field(max_length=80)
+    anmerkung: Optional[str] = Field(default=None, max_length=80)

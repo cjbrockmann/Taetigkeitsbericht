@@ -75,7 +75,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Soll",
         "Vertrag",
         "Kommentar",
-        "d",
+        "Tag",
     ]
     HEADER_TOOLTIPS = [
         "Wird automatisch aus dem Datum ermittelt",

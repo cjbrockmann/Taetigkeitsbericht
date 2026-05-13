@@ -104,3 +104,30 @@ class Krankmeldung(BaseModel):
         if self.krank_von > self.krank_bis:
             raise ValueError("krank_von muss vor oder gleich krank_bis liegen.")
         return self
+
+class Betriebsferien(BaseModel):
+    id: Optional[int] = None
+    datum_von: date = Field(description="Datum von")
+    datum_bis: date = Field(description="Datum bis")
+    betriebsferienname: str = Field(description="Betriebsferienname", max_length=80)
+    anmerkung: Optional[str] = Field(default=None, max_length=80)
+
+    @model_validator(mode="after")
+    def pruefe_datumsbereich(self) -> "Betriebsferien":
+        if self.datum_von > self.datum_bis:
+            raise ValueError("datum_von muss vor oder gleich datum_bis liegen.")
+        return self
+
+class Schulferien(BaseModel):
+    id: Optional[int] = None
+    datum_von: date = Field(description="Datum von")
+    datum_bis: date = Field(description="Datum bis")
+    schulferienname: str = Field(description="Schulferienname", max_length=80)
+    anmerkung: Optional[str] = Field(default=None, max_length=80)
+
+    @model_validator(mode="after")
+    def pruefe_datumsbereich(self) -> "Schulferien":
+        if self.datum_von > self.datum_bis:
+            raise ValueError("datum_von muss vor oder gleich datum_bis liegen.")
+        return self
+        
