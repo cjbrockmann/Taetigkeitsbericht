@@ -57,6 +57,14 @@ class ZeiteintragRow:
     pause2_beginn: str = ""
     pause2_ende: str = ""
     anmerkung: str = ""
+    geleistete_stunden: str = ""
+    soll_stunden_nach_stundenplan: str = ""
+    soll_stunden_nach_vertrag: str = ""
+    ist_urlaub: bool = False
+    ist_krank: bool = False
+    ist_feiertag: bool = False
+    ist_ferien: bool = False
+    ist_betriebsferien: bool = False
 
 
 class ZeiteintragTableModel(QAbstractTableModel):
@@ -76,6 +84,11 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Vertrag",
         "Kommentar",
         "Tag",
+        "Urlaub",
+        "Krank",
+        "Feiertag",
+        "Ferien",
+        "Betriebsferien",
     ]
     HEADER_TOOLTIPS = [
         "Wird automatisch aus dem Datum ermittelt",
@@ -91,6 +104,11 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Soll nach Vertrag, Format HH:MM",
         "Freitext (max. 80 Zeichen)",
         "Kalendertag als Text fuer Excel (z. B. 7.)",
+        "Tag ist Urlaub",
+        "Tag ist Krankheit",
+        "Tag ist Feiertag",
+        "Tag ist Schulferien",
+        "Tag ist Betriebsferien",
     ]
 
     def __init__(self) -> None:
@@ -146,7 +164,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         if not index.isValid():
             return None
         row = self._rows[index.row()]
-        if role == Qt.TextAlignmentRole and index.column() == 12:
+        if role == Qt.TextAlignmentRole and index.column() in (12, 13, 14, 15, 16, 17):
             return int(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         if role == Qt.BackgroundRole:
             if self._is_weekend_date(row.datum):
@@ -208,6 +226,16 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 return row.anmerkung
             case 12:
                 return self._kalendertag_mit_punkt_fuer_excel(row.datum)
+            case 13:
+                return "✓" if row.ist_urlaub else ""
+            case 14:
+                return "✓" if row.ist_krank else ""
+            case 15:
+                return "✓" if row.ist_feiertag else ""
+            case 16:
+                return "✓" if row.ist_ferien else ""
+            case 17:
+                return "✓" if row.ist_betriebsferien else ""
             case _:
                 return None
 
@@ -236,7 +264,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
             row.pause2_beginn = text
         elif index.column() == 7:
             row.pause2_ende = text
-        elif index.column() in (8, 9, 10, 12):
+        elif index.column() in (8, 9, 10, 12, 13, 14, 15, 16, 17):
             return False
         elif index.column() == 11:
             row.anmerkung = text
@@ -280,7 +308,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
             return Qt.ItemIsEnabled
-        if index.column() in (0, 8, 9, 10, 12):
+        if index.column() in (0, 8, 9, 10, 12, 13, 14, 15, 16, 17):
             return Qt.ItemIsSelectable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
 

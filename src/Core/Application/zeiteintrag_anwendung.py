@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from calendar import monthrange
 from datetime import date, time
 from typing import Optional
 from uuid import UUID
@@ -113,9 +114,35 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         result = list(map(self._zeiteintrag_zu_dto, parent_liste))
         return result
 
-    def liste_alle_tage(self, jahr: int, monat: int) -> list[ZeiteintragsDTO]:
-        return self.liste(jahr=jahr, monat=monat)
+    def liste_im_monat(self, jahr: int, monat: int) -> list[ZeiteintragsDTO]:
+        parent_liste = super().liste(jahr=jahr, monat=monat)
+        eintraege_nach_tag: dict[date, list[Zeiteintrag]] = {}
+        for eintrag in parent_liste:
+            eintraege_nach_tag.setdefault(eintrag.datum, []).append(eintrag)
 
+        tage_im_monat = monthrange(jahr, monat)[1]
+        alle_eintraege: list[Zeiteintrag] = []
+        for tag in range(1, tage_im_monat + 1):
+            aktuelles_datum = date(jahr, monat, tag)
+            tages_eintraege = eintraege_nach_tag.get(aktuelles_datum, [])
+            if tages_eintraege:
+                alle_eintraege.extend(tages_eintraege)
+            else:
+                # Leerer Eintrag für fehlende Tage
+                alle_eintraege.append(Zeiteintrag(
+                    id=None,
+                    datum=aktuelles_datum,
+                    uhrzeit_von=time(0, 0),
+                    uhrzeit_bis=time(0, 0),
+                    pause_beginn=None,
+                    pause_ende=None,
+                    pause2_beginn=None,
+                    pause2_ende=None,
+                    anmerkung=None,
+                ))
+
+        result = list(map(self._zeiteintrag_zu_dto, alle_eintraege))
+        return result
 
     def loesche_fuer_datum(self, datum: date) -> bool:
         return super().loesche_fuer_datum(datum)

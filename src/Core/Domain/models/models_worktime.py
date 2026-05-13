@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 class ArbeitszeitBasis(BaseModel):
     uhrzeit_von: time = Field(description="Startzeit")
     uhrzeit_bis: time = Field(description="Endzeit")
-    pause_beginn: Optional[time] = Field(default=None, description="Start der Unterbrechung")
-    pause_ende: Optional[time] = Field(default=None, description="Ende der Unterbrechung")
+    pause_beginn:  Optional[time] = Field(default=None, description="Start der Unterbrechung")
+    pause_ende:    Optional[time] = Field(default=None, description="Ende der Unterbrechung")
     pause2_beginn: Optional[time] = Field(default=None, description="Start der zweiten Unterbrechung")
-    pause2_ende: Optional[time] = Field(default=None, description="Ende der zweiten Unterbrechung")
-    anmerkung: Optional[str] = Field(default=None, max_length=80)
+    pause2_ende:   Optional[time] = Field(default=None, description="Ende der zweiten Unterbrechung")
+    anmerkung:     Optional[str]  = Field(default=None, max_length=80)
 
     @model_validator(mode="after")
     def pruefe_zeitraeume(self) -> "ArbeitszeitBasis":
@@ -42,31 +42,41 @@ class ArbeitszeitBasis(BaseModel):
         return self
 
 
+# Hauptmodell für Zeiteinträge, das in der Datenbank gespeichert wird
 class Zeiteintrag(ArbeitszeitBasis):
     id: Optional[UUID] = None
     datum: date
 
+# Klasse, die an die GUI übergeben wird, mit zusätzlichen Feldern für die Anzeige und Bearbeitung
+class ZeiteintragsDTO(Zeiteintrag):
+    uhrzeit_von: Optional[time] = Field(description="Startzeit")  # Typ‑Override
+    uhrzeit_bis: Optional[time] = Field(description="Endzeit")    # Typ‑Override
+    geleistete_stunden: Optional[time] = Field(description="Endzeit")
+    soll_stunden_nach_Stundenplan: Optional[time] = Field(description="Soll-Stunden nach Stundenplan")
+    soll_stunden_nach_vertrag: Optional[time] = Field(description="Soll-Stunden nach Vertrag")
+    ist_urlaub: bool = Field(description="Ist Urlaub", default=False)
+    ist_krank: bool = Field(description="Ist Krank", default=False)
+    ist_feiertag: bool = Field(description="Ist Feiertag", default=False)
+    ist_ferien: bool = Field(description="Ist Ferien", default=False)
+    ist_betriebsferien: bool = Field(description="Ist Betriebsferien", default=False) 
 
+
+# Klasse für den Stundenplan, der eine Vorlage für die Soll-Arbeitszeiten an jedem Wochentag darstellt
 class Stundenplan(ArbeitszeitBasis):
     id: Optional[int] = None
     wochentag: int = Field(ge=1, le=7, description="1=Montag, 7=Sonntag")
+
+
+
+
+# -------------------------------------------------------------------------------
+# Weitere Modelle für Stundenplan, Feiertage, usw.
 
 
 class Feiertag(BaseModel):
     datum: date
     feiertagsname: str = Field(max_length=80, description="Name des Feiertags")
     hinweis: Optional[str] = Field(default=None, max_length=80, description="Zusatzinfo, z. B. aus Feiertags-API")
-
-# Klasse zum Lesen der Einträge aus der Datenbank
-class ZeiteintragsDTO(Zeiteintrag):
-    geleistete_stunden: time = Field(description="Endzeit")
-    soll_stunden_nach_Stundenplan: time = Field(description="Soll-Stunden nach Stundenplan")
-    soll_stunden_nach_vertrag: time = Field(description="Soll-Stunden nach Vertrag")
-    ist_urlaub: bool = Field(description="Ist Urlaub")
-    ist_krank: bool = Field(description="Ist Krank")
-    ist_feiertag: bool = Field(description="Ist Feiertag")
-    ist_ferien: bool = Field(description="Ist Ferien")
-    ist_betriebsferien: bool = Field(description="Ist Betriebsferien") 
 
 class Urlaubsantrag(BaseModel):
     id: Optional[int] = None

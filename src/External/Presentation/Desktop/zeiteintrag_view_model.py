@@ -9,7 +9,7 @@ from PySide6.QtCore import QObject, Signal
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
 from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung
-from Core.Domain.models.models_worktime import Zeiteintrag
+from Core.Domain.models.models_worktime import Zeiteintrag, ZeiteintragsDTO
 from External.Presentation.Desktop.feiertag_registry import FeiertagRegistry
 from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
 from External.Presentation.Desktop.arbeitszeit_berechnung import zeit_aus_text
@@ -82,7 +82,7 @@ class ZeiteintragViewModel(QObject):
         )
 
         eintraege = self._anwendung.liste(jahr=jahr, monat=monat)
-        eintraege_nach_tag: dict[date, list[Zeiteintrag]] = {}
+        eintraege_nach_tag: dict[date, list[ZeiteintragsDTO]] = {}
         for eintrag in eintraege:
             eintraege_nach_tag.setdefault(eintrag.datum, []).append(eintrag)
 
@@ -203,7 +203,7 @@ class ZeiteintragViewModel(QObject):
         return ergebnis
 
     @staticmethod
-    def _map_to_row(eintrag: Zeiteintrag) -> ZeiteintragRow:
+    def _map_to_row(eintrag: ZeiteintragsDTO) -> ZeiteintragRow:
         return ZeiteintragRow(
             id=eintrag.id,
             datum=eintrag.datum.strftime("%d.%m.%Y"),
@@ -218,4 +218,12 @@ class ZeiteintragViewModel(QObject):
             else "",
             pause2_ende=eintrag.pause2_ende.strftime("%H:%M") if eintrag.pause2_ende else "",
             anmerkung=eintrag.anmerkung or "",
+            geleistete_stunden=eintrag.geleistete_stunden.strftime("%H:%M") if eintrag.geleistete_stunden else "",
+            soll_stunden_nach_stundenplan=eintrag.soll_stunden_nach_Stundenplan.strftime("%H:%M") if eintrag.soll_stunden_nach_Stundenplan else "",
+            soll_stunden_nach_vertrag=eintrag.soll_stunden_nach_vertrag.strftime("%H:%M") if eintrag.soll_stunden_nach_vertrag else "",
+            ist_urlaub=eintrag.ist_urlaub,
+            ist_krank=eintrag.ist_krank,
+            ist_feiertag=eintrag.ist_feiertag,
+            ist_ferien=eintrag.ist_ferien,
+            ist_betriebsferien=eintrag.ist_betriebsferien,
         )
