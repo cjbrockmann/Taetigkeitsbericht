@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+import json
 from datetime import date, time
 from typing import Optional
 from uuid import UUID
 
-from Core.Domain.models.models_worktime import Stundenplan, Zeiteintrag, ZeiteintragsDTO, Urlaubsantrag, Krankmeldung, Feiertag
+from Core.Domain.models.models_worktime import (
+    Betriebsferien,
+    Feiertag,
+    Krankmeldung,
+    Schulferien,
+    Stundenplan,
+    Urlaubsantrag,
+    Zeiteintrag,
+    ZeiteintragsDTO,
+)
 from Core.Domain.services.zeiteintrag_service import ZeiteintragService
 from Core.Domain.services.stundenplan_service import StundenplanService
 from Core.Domain.services.feiertag_service import FeiertagService 
 from Core.Domain.services.urlaubsantrag_service import UrlaubsantragService
 from Core.Domain.services.krankmeldung_service import KrankmeldungService
+from Core.Domain.services.schulferien_service import SchulferienService
+from Core.Domain.services.betriebsferien_service import BetriebsferienService
 
 
 class ZeiteintragAnwendung:
@@ -62,16 +74,22 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
                serviceFeiertage: FeiertagService, 
                serviceUrlaub: UrlaubsantragService,
                serviceKrank: KrankmeldungService,
+               serviceSchulferien: SchulferienService,
+               serviceBetriebsferien: BetriebsferienService,
                ) -> None:
         super().__init__(serviceZeiteintrag)
         self._serviceStundenplan = serviceStundenplan
         self._serviceFeiertage = serviceFeiertage
         self._serviceUrlaub = serviceUrlaub
         self._serviceKrank = serviceKrank
+        self._serviceSchulferien = serviceSchulferien
+        self._serviceBetriebsferien = serviceBetriebsferien
         self.stundenplan_eintraege: list[Stundenplan] = []
         self.feiertage: list[Feiertag] = []
         self.urlaubsantraege: list[Urlaubsantrag] = []
         self.krankmeldungen: list[Krankmeldung] = []
+        self.schulferien: list[Schulferien] = []
+        self.betriebsferien: list[Betriebsferien] = []
 
     # ----------------------------------------------------------------------  
     #   Overwrite der Basisfunktionen
@@ -92,8 +110,13 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
 
     def liste(self, jahr: Optional[int] = None, monat: Optional[int] = None) -> list[ZeiteintragsDTO]:
         parent_liste = super().liste(jahr=jahr, monat=monat)
-        return list(map(self._zeiteintrag_zu_dto, parent_liste))
-    
+        result = list(map(self._zeiteintrag_zu_dto, parent_liste))
+        return result
+
+    def liste_alle_tage(self, jahr: int, monat: int) -> list[ZeiteintragsDTO]:
+        return self.liste(jahr=jahr, monat=monat)
+
+
     def loesche_fuer_datum(self, datum: date) -> bool:
         return super().loesche_fuer_datum(datum)
     
@@ -145,6 +168,12 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         if not any(e.krank_von.year == jahr or e.krank_bis.year == jahr for e in self.krankmeldungen):
             self.krankmeldungen = self._serviceKrank.liste_krankmeldungen(jahr)
 
+        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.schulferien):
+            self.schulferien = self._serviceSchulferien.liste_schulferien(jahr)
+
+        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.betriebsferien):
+            self.betriebsferien = self._serviceBetriebsferien.liste_betriebsferien(jahr)
+
         return ZeiteintragsDTO(
             id=eintrag.id,
             datum=eintrag.datum,
@@ -161,8 +190,10 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             ist_urlaub=any(obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.urlaubsantraege),
             ist_krank=any(obj.krank_von <= eintrag.datum <= obj.krank_bis for obj in self.krankmeldungen),
             ist_feiertag=any(obj.datum == eintrag.datum for obj in self.feiertage),
-            ist_ferien=False,
-            ist_betriebsferien=False,
+            ist_ferien=any(obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.schulferien),
+            ist_betriebsferien=any(
+                obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.betriebsferien
+            ),
         )
 
 

@@ -80,6 +80,8 @@ class ApplicationDIModule(Module):
         feiertag_service: FeiertagService,
         urlaubsantrag_service: UrlaubsantragService,
         krankmeldung_service: KrankmeldungService,
+        schulferien_service: SchulferienService,
+        betriebsferien_service: BetriebsferienService,
     ) -> ZeiteintragAnwendungDTO:
         return ZeiteintragAnwendungDTO(
             zeiteintrag_service,
@@ -87,6 +89,8 @@ class ApplicationDIModule(Module):
             feiertag_service,
             urlaubsantrag_service,
             krankmeldung_service,
+            schulferien_service,
+            betriebsferien_service,
         )
 
     @singleton
