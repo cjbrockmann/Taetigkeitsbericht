@@ -91,6 +91,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self.krankmeldungen: list[Krankmeldung] = []
         self.schulferien: list[Schulferien] = []
         self.betriebsferien: list[Betriebsferien] = []
+        self._geladenes_jahr: Optional[int] = None
 
     # ----------------------------------------------------------------------  
     #   Overwrite der Basisfunktionen
@@ -115,35 +116,34 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         return result
 
     def liste_im_monat(self, jahr: int, monat: int) -> list[ZeiteintragsDTO]:
+
+        self._initialisiere_jahresdaten(jahr, force=True)  # Sicherstellen, dass alle Daten für das Jahr geladen sind
         parent_liste = super().liste(jahr=jahr, monat=monat)
-        eintraege_nach_tag: dict[date, list[Zeiteintrag]] = {}
-        for eintrag in parent_liste:
+        eintraege = list(map(self._zeiteintrag_zu_dto, parent_liste))
+
+        eintraege_nach_tag: dict[date, list[ZeiteintragsDTO]] = {}
+        for eintrag in eintraege:
             eintraege_nach_tag.setdefault(eintrag.datum, []).append(eintrag)
 
         tage_im_monat = monthrange(jahr, monat)[1]
-        alle_eintraege: list[Zeiteintrag] = []
+        alle_eintraege: list[ZeiteintragsDTO] = []
         for tag in range(1, tage_im_monat + 1):
             aktuelles_datum = date(jahr, monat, tag)
             tages_eintraege = eintraege_nach_tag.get(aktuelles_datum, [])
             if tages_eintraege:
                 alle_eintraege.extend(tages_eintraege)
             else:
-                # Leerer Eintrag für fehlende Tage. Verwende eine gültige Zeitspanne,
-                # damit das Zeiteintrag-Modell den Validator nicht verletzt.
-                alle_eintraege.append(Zeiteintrag(
+                alle_eintraege.append(ZeiteintragsDTO(
                     id=None,
                     datum=aktuelles_datum,
-                    uhrzeit_von=time(0, 0),
-                    uhrzeit_bis=time(0, 1),
-                    pause_beginn=None,
-                    pause_ende=None,
-                    pause2_beginn=None,
-                    pause2_ende=None,
-                    anmerkung=None,
+                    uhrzeit_von=None,
+                    uhrzeit_bis=None,
                 ))
 
-        result = list(map(self._zeiteintrag_zu_dto, alle_eintraege))
-        return result
+        for eintrag in alle_eintraege:
+            self._initialisiere_dto(eintrag)        
+
+        return alle_eintraege
 
     def loesche_fuer_datum(self, datum: date) -> bool:
         return super().loesche_fuer_datum(datum)
@@ -153,6 +153,30 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
 
     # ----------------------------------------------------------------------  
     #   Hilfsfunktionen
+    def _initialisiere_jahresdaten(self, jahr: int, force: bool = False) -> None:
+        if self._geladenes_jahr == jahr and not force:     
+            return  # Bereits geladen, nichts zu tun
+        self._geladenes_jahr = jahr
+
+        if not self.stundenplan_eintraege or force:
+            self.stundenplan_eintraege = self._serviceStundenplan.liste_stundenplan_eintraege()
+
+        if not any(e.datum.year == jahr for e in self.feiertage) or force:
+            self.feiertage = self._serviceFeiertage.liste_feiertage(jahr)
+
+        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.urlaubsantraege) or force:
+            self.urlaubsantraege = self._serviceUrlaub.liste_urlaubsantraege(jahr)
+
+        if not any(e.krank_von.year == jahr or e.krank_bis.year == jahr for e in self.krankmeldungen) or force:
+            self.krankmeldungen = self._serviceKrank.liste_krankmeldungen(jahr)
+
+        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.schulferien) or force:
+            self.schulferien = self._serviceSchulferien.liste_schulferien(jahr)
+
+        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.betriebsferien) or force:
+            self.betriebsferien = self._serviceBetriebsferien.liste_betriebsferien(jahr)
+
+
     def _sekunden_seit_mitternacht(self, t: time) -> int:
         return t.hour * 3600 + t.minute * 60 + t.second
 
@@ -180,61 +204,76 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         m, s = divmod(sekunden % 3600, 60)
         return time(hour=h, minute=m, second=s)
 
+    def _berechne_soll_stunden_nach_stundenplan(self, datum: date) -> time | None:
+        """Berechnet die Soll-Arbeitszeit anhand des Stundenplans für den Wochentag des Datums."""
+        wochentag = datum.isoweekday()  # 1=Montag, 7=Sonntag (ISO 8601)
+        stundenplan_eintrag = next(
+            (e for e in self.stundenplan_eintraege if e.wochentag == wochentag),
+            None
+        )
+        if stundenplan_eintrag is None:
+            return None
+        netto_s = self._netto_arbeitssekunden(stundenplan_eintrag)
+        return self._sekunden_als_uhrzeit_fuer_dauer(netto_s)
+
+    def _initialisiere_dto(self, eintrag: ZeiteintragsDTO) -> ZeiteintragsDTO:
+        eintrag.ist_urlaub = any(obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.urlaubsantraege)
+        eintrag.ist_krank = any(obj.krank_von <= eintrag.datum <= obj.krank_bis for obj in self.krankmeldungen)
+        eintrag.ist_feiertag = any(obj.datum == eintrag.datum for obj in self.feiertage)
+        eintrag.ist_ferien = any(obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.schulferien)
+        eintrag.ist_betriebsferien = any(
+            obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.betriebsferien
+        )
+        eintrag.feiertagsname = next((f.feiertagsname for f in self.feiertage if f.datum == eintrag.datum), None)
+        eintrag.schulferienname = next((s.schulferienname for s in self.schulferien if s.datum_von <= eintrag.datum <= s.datum_bis), None)
+
+        if eintrag.uhrzeit_von is not None and eintrag.uhrzeit_bis is not None:
+            eintrag.geleistete_stunden = self._sekunden_als_uhrzeit_fuer_dauer(
+                self._netto_arbeitssekunden(eintrag)
+            )
+            eintrag.soll_stunden_nach_Stundenplan = self._berechne_soll_stunden_nach_stundenplan(eintrag.datum)
+
+        return eintrag
+
+    def _leerer_eintrag_dto(self, datum: date) -> ZeiteintragsDTO:
+        return self._initialisiere_dto(ZeiteintragsDTO(
+            id=None,
+            datum=datum,
+            uhrzeit_von=None,
+            uhrzeit_bis=None,
+            pause_beginn = None,
+            pause_ende   = None,
+            pause2_beginn= None,
+            pause2_ende  = None,
+            anmerkung    = None,            
+        ))    
+
+
     def _zeiteintrag_zu_dto(self, eintrag: Zeiteintrag) -> ZeiteintragsDTO:
-
-
-        netto_s = self._netto_arbeitssekunden(eintrag)
         jahr = eintrag.datum.year
-
-        if not self.stundenplan_eintraege:
-            self.stundenplan_eintraege = self._serviceStundenplan.liste_stundenplan_eintraege()
-
-        if not any(e.datum.year == jahr for e in self.feiertage):
-            self.feiertage = self._serviceFeiertage.liste_feiertage(jahr)
-
-        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.urlaubsantraege):
-            self.urlaubsantraege = self._serviceUrlaub.liste_urlaubsantraege(jahr)
-
-        if not any(e.krank_von.year == jahr or e.krank_bis.year == jahr for e in self.krankmeldungen):
-            self.krankmeldungen = self._serviceKrank.liste_krankmeldungen(jahr)
-
-        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.schulferien):
-            self.schulferien = self._serviceSchulferien.liste_schulferien(jahr)
-
-        if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.betriebsferien):
-            self.betriebsferien = self._serviceBetriebsferien.liste_betriebsferien(jahr)
-
-        return ZeiteintragsDTO(
+        self._initialisiere_jahresdaten(jahr)
+        netto_s = self._netto_arbeitssekunden(eintrag)
+        dto = self._initialisiere_dto(ZeiteintragsDTO(
             id=eintrag.id,
             datum=eintrag.datum,
-            uhrzeit_von=None if eintrag.uhrzeit_von == time(0, 0, 0) else eintrag.uhrzeit_von,
-            uhrzeit_bis=None if eintrag.uhrzeit_bis == time(0, 0, 0) else eintrag.uhrzeit_bis,
-            pause_beginn=eintrag.pause_beginn,
-            pause_ende=eintrag.pause_ende,
-            pause2_beginn=eintrag.pause2_beginn,
-            pause2_ende=eintrag.pause2_ende,
-            anmerkung=eintrag.anmerkung,
-            geleistete_stunden=self._sekunden_als_uhrzeit_fuer_dauer(netto_s),
-            soll_stunden_nach_Stundenplan=time(0, 0, 0),
-            soll_stunden_nach_vertrag=time(0, 0, 0),
-            ist_urlaub=any(obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.urlaubsantraege),
-            ist_krank=any(obj.krank_von <= eintrag.datum <= obj.krank_bis for obj in self.krankmeldungen),
-            ist_feiertag=any(obj.datum == eintrag.datum for obj in self.feiertage),
-            ist_ferien=any(obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.schulferien),
-            ist_betriebsferien=any(
-                obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.betriebsferien
-            ),
-            feiertagsname=next((f.feiertagsname for f in self.feiertage if f.datum == eintrag.datum), None),
-            schulferienname=next((s.schulferienname for s in self.schulferien if s.datum_von <= eintrag.datum <= s.datum_bis), None),
-        )
-
+            uhrzeit_von  = eintrag.uhrzeit_von,
+            uhrzeit_bis  = eintrag.uhrzeit_bis,
+            pause_beginn = eintrag.pause_beginn,
+            pause_ende   = eintrag.pause_ende,
+            pause2_beginn= eintrag.pause2_beginn,
+            pause2_ende  = eintrag.pause2_ende,
+            anmerkung    = eintrag.anmerkung,
+        ))
+        return dto
 
     def _dto_zu_zeiteintrag(self, eintrag: ZeiteintragsDTO) -> Zeiteintrag:
+        if eintrag.uhrzeit_von is None or eintrag.uhrzeit_bis is None:
+            return None
         return Zeiteintrag(
             id=eintrag.id,
             datum=eintrag.datum,
             uhrzeit_von=time(0, 0, 0) if eintrag.uhrzeit_von is None else eintrag.uhrzeit_von,
-            uhrzeit_bis=time(0, 0, 0) if eintrag.uhrzeit_bis is None else eintrag.uhrzeit_bis,
+            uhrzeit_bis=time(0, 0, 1) if eintrag.uhrzeit_bis is None else eintrag.uhrzeit_bis,
             pause_beginn=eintrag.pause_beginn,
             pause_ende=eintrag.pause_ende,
             pause2_beginn=eintrag.pause2_beginn,

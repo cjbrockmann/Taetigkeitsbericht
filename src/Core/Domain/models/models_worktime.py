@@ -58,11 +58,11 @@ class Zeiteintrag(ArbeitszeitBasis):
 
 # Klasse, die an die GUI übergeben wird, mit zusätzlichen Feldern für die Anzeige und Bearbeitung
 class ZeiteintragsDTO(Zeiteintrag):
-    uhrzeit_von: Optional[time] = Field(description="Startzeit")  # Typ‑Override
-    uhrzeit_bis: Optional[time] = Field(description="Endzeit")    # Typ‑Override
-    geleistete_stunden: Optional[time] = Field(description="Endzeit")
-    soll_stunden_nach_Stundenplan: Optional[time] = Field(description="Soll-Stunden nach Stundenplan")
-    soll_stunden_nach_vertrag: Optional[time] = Field(description="Soll-Stunden nach Vertrag")
+    uhrzeit_von: Optional[time] = Field(description="Startzeit", default=None)  # Typ‑Override
+    uhrzeit_bis: Optional[time] = Field(description="Endzeit", default=None)    # Typ‑Override
+    geleistete_stunden: Optional[time] = Field(description="Endzeit", default=None)
+    soll_stunden_nach_Stundenplan: Optional[time] = Field(description="Soll-Stunden nach Stundenplan", default=None)
+    soll_stunden_nach_vertrag: Optional[time] = Field(description="Soll-Stunden nach Vertrag", default=None)
     ist_urlaub: bool = Field(description="Ist Urlaub", default=False)
     ist_krank: bool = Field(description="Ist Krank", default=False)
     ist_feiertag: bool = Field(description="Ist Feiertag", default=False)

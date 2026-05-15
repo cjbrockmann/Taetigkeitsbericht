@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from calendar import monthrange
 from datetime import date, datetime, time
+from typing import Optional
 from uuid import UUID
 
 from PySide6.QtCore import QObject, Signal
@@ -19,6 +19,7 @@ from External.Presentation.Desktop.zeiteintrag_table_model import ZeiteintragRow
 class ZeiteintragViewModel(QObject):
     status_changed = Signal(str)
     error_occurred = Signal(str)
+    _selectedYear: int | None = None
 
     def __init__(
         self,
@@ -45,6 +46,7 @@ class ZeiteintragViewModel(QObject):
         self._geladenes_monat: int | None = None
         self._feiertag_registry.feiertage_geaendert.connect(self._auf_feiertage_geaendert)
         self._stundenplan_registry.stundenplan_geaendert.connect(self._auf_stundenplan_geaendert)
+        
 
     @property
     def table_model(self) -> ZeiteintragTableModel:
@@ -82,19 +84,7 @@ class ZeiteintragViewModel(QObject):
         )
 
         eintraege = self._anwendung.liste_im_monat(jahr=jahr, monat=monat)
-        eintraege_nach_tag: dict[date, list[ZeiteintragsDTO]] = {}
-        for eintrag in eintraege:
-            eintraege_nach_tag.setdefault(eintrag.datum, []).append(eintrag)
-
-        tage_im_monat = monthrange(jahr, monat)[1]
-        rows: list[ZeiteintragRow] = []
-        for tag in range(1, tage_im_monat + 1):
-            aktuelles_datum = date(jahr, monat, tag)
-            tages_eintraege = eintraege_nach_tag.get(aktuelles_datum, [])
-            if tages_eintraege:
-                rows.extend(self._map_to_row(eintrag) for eintrag in tages_eintraege)
-                continue
-            rows.append(ZeiteintragRow(datum=aktuelles_datum.strftime("%d.%m.%Y")))
+        rows = [self._map_to_row(eintrag) for eintrag in eintraege]
 
         self._table_model.set_rows(rows)
         self._table_model.set_feiertag_nach_datum(
