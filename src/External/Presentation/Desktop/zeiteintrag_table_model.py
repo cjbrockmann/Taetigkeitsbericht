@@ -65,6 +65,8 @@ class ZeiteintragRow:
     ist_feiertag: bool = False
     ist_ferien: bool = False
     ist_betriebsferien: bool = False
+    feiertagsname: str = ""
+    schulferienname: str = ""
 
 
 class ZeiteintragTableModel(QAbstractTableModel):
@@ -89,6 +91,8 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Feiertag",
         "Ferien",
         "Betriebsferien",
+        "Feiertagsname",
+        "Schulferienname",
     ]
     HEADER_TOOLTIPS = [
         "Wird automatisch aus dem Datum ermittelt",
@@ -109,6 +113,8 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Tag ist Feiertag",
         "Tag ist Schulferien",
         "Tag ist Betriebsferien",
+        "Name des Feiertags",
+        "Name der Schulferien",
     ]
 
     def __init__(self) -> None:
@@ -236,6 +242,10 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 return "✓" if row.ist_ferien else ""
             case 17:
                 return "✓" if row.ist_betriebsferien else ""
+            case 18:
+                return row.feiertagsname
+            case 19:
+                return row.schulferienname
             case _:
                 return None
 
@@ -264,7 +274,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
             row.pause2_beginn = text
         elif index.column() == 7:
             row.pause2_ende = text
-        elif index.column() in (8, 9, 10, 12, 13, 14, 15, 16, 17):
+        elif index.column() in (8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19):
             return False
         elif index.column() == 11:
             row.anmerkung = text
@@ -308,7 +318,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
             return Qt.ItemIsEnabled
-        if index.column() in (0, 8, 9, 10, 12, 13, 14, 15, 16, 17):
+        if index.column() in (0, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19):
             return Qt.ItemIsSelectable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
 

@@ -18,8 +18,9 @@ class ArbeitszeitBasis(BaseModel):
 
     @model_validator(mode="after")
     def pruefe_zeitraeume(self) -> "ArbeitszeitBasis":
-        if self.uhrzeit_von >= self.uhrzeit_bis:
-            raise ValueError("uhrzeit_von muss vor uhrzeit_bis liegen.")
+        if self.uhrzeit_von is not None and self.uhrzeit_bis is not None:
+            if self.uhrzeit_von >= self.uhrzeit_bis:
+                raise ValueError("uhrzeit_von muss vor uhrzeit_bis liegen.")
 
         if (self.pause_beginn is None) ^ (self.pause_ende is None):
             raise ValueError("pause_beginn und pause_ende muessen gemeinsam gesetzt sein.")
@@ -27,7 +28,11 @@ class ArbeitszeitBasis(BaseModel):
         if self.pause_beginn and self.pause_ende:
             if self.pause_beginn >= self.pause_ende:
                 raise ValueError("pause_beginn muss vor pause_ende liegen.")
-            if self.pause_beginn < self.uhrzeit_von or self.pause_ende > self.uhrzeit_bis:
+            if (
+                self.uhrzeit_von is not None
+                and self.uhrzeit_bis is not None
+                and (self.pause_beginn < self.uhrzeit_von or self.pause_ende > self.uhrzeit_bis)
+            ):
                 raise ValueError("Unterbrechung muss innerhalb der Arbeitszeit liegen.")
 
         if (self.pause2_beginn is None) ^ (self.pause2_ende is None):
@@ -36,7 +41,11 @@ class ArbeitszeitBasis(BaseModel):
         if self.pause2_beginn and self.pause2_ende:
             if self.pause2_beginn >= self.pause2_ende:
                 raise ValueError("pause2_beginn muss vor pause2_ende liegen.")
-            if self.pause2_beginn < self.uhrzeit_von or self.pause2_ende > self.uhrzeit_bis:
+            if (
+                self.uhrzeit_von is not None
+                and self.uhrzeit_bis is not None
+                and (self.pause2_beginn < self.uhrzeit_von or self.pause2_ende > self.uhrzeit_bis)
+            ):
                 raise ValueError("Die zweite Unterbrechung muss innerhalb der Arbeitszeit liegen.")
 
         return self
@@ -59,6 +68,10 @@ class ZeiteintragsDTO(Zeiteintrag):
     ist_feiertag: bool = Field(description="Ist Feiertag", default=False)
     ist_ferien: bool = Field(description="Ist Ferien", default=False)
     ist_betriebsferien: bool = Field(description="Ist Betriebsferien", default=False) 
+    feiertagsname: Optional[str] = Field(default=None, max_length=80, description="Name des Feiertags")
+    schulferienname: Optional[str] = Field(default=None, max_length=80, description="Name der Schulferien")
+
+
 
 
 # Klasse für den Stundenplan, der eine Vorlage für die Soll-Arbeitszeiten an jedem Wochentag darstellt

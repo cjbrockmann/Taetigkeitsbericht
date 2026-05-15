@@ -81,7 +81,7 @@ class ZeiteintragViewModel(QObject):
             benachrichtigen=False,
         )
 
-        eintraege = self._anwendung.liste(jahr=jahr, monat=monat)
+        eintraege = self._anwendung.liste_im_monat(jahr=jahr, monat=monat)
         eintraege_nach_tag: dict[date, list[ZeiteintragsDTO]] = {}
         for eintrag in eintraege:
             eintraege_nach_tag.setdefault(eintrag.datum, []).append(eintrag)
@@ -207,8 +207,8 @@ class ZeiteintragViewModel(QObject):
         return ZeiteintragRow(
             id=eintrag.id,
             datum=eintrag.datum.strftime("%d.%m.%Y"),
-            uhrzeit_von=eintrag.uhrzeit_von.strftime("%H:%M"),
-            uhrzeit_bis=eintrag.uhrzeit_bis.strftime("%H:%M"),
+            uhrzeit_von=eintrag.uhrzeit_von.strftime("%H:%M") if eintrag.uhrzeit_von else "",
+            uhrzeit_bis=eintrag.uhrzeit_bis.strftime("%H:%M") if eintrag.uhrzeit_bis else "",
             pause_beginn=eintrag.pause_beginn.strftime("%H:%M")
             if eintrag.pause_beginn
             else "",
@@ -226,4 +226,6 @@ class ZeiteintragViewModel(QObject):
             ist_feiertag=eintrag.ist_feiertag,
             ist_ferien=eintrag.ist_ferien,
             ist_betriebsferien=eintrag.ist_betriebsferien,
+            feiertagsname=eintrag.feiertagsname or "",
+            schulferienname=eintrag.schulferienname or "",
         )

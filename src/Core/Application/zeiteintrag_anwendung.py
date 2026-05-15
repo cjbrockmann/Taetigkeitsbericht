@@ -128,12 +128,13 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             if tages_eintraege:
                 alle_eintraege.extend(tages_eintraege)
             else:
-                # Leerer Eintrag für fehlende Tage
+                # Leerer Eintrag für fehlende Tage. Verwende eine gültige Zeitspanne,
+                # damit das Zeiteintrag-Modell den Validator nicht verletzt.
                 alle_eintraege.append(Zeiteintrag(
                     id=None,
                     datum=aktuelles_datum,
                     uhrzeit_von=time(0, 0),
-                    uhrzeit_bis=time(0, 0),
+                    uhrzeit_bis=time(0, 1),
                     pause_beginn=None,
                     pause_ende=None,
                     pause2_beginn=None,
@@ -180,6 +181,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         return time(hour=h, minute=m, second=s)
 
     def _zeiteintrag_zu_dto(self, eintrag: Zeiteintrag) -> ZeiteintragsDTO:
+
+
         netto_s = self._netto_arbeitssekunden(eintrag)
         jahr = eintrag.datum.year
 
@@ -204,8 +207,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         return ZeiteintragsDTO(
             id=eintrag.id,
             datum=eintrag.datum,
-            uhrzeit_von=eintrag.uhrzeit_von,
-            uhrzeit_bis=eintrag.uhrzeit_bis,
+            uhrzeit_von=None if eintrag.uhrzeit_von == time(0, 0, 0) else eintrag.uhrzeit_von,
+            uhrzeit_bis=None if eintrag.uhrzeit_bis == time(0, 0, 0) else eintrag.uhrzeit_bis,
             pause_beginn=eintrag.pause_beginn,
             pause_ende=eintrag.pause_ende,
             pause2_beginn=eintrag.pause2_beginn,
@@ -221,6 +224,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             ist_betriebsferien=any(
                 obj.datum_von <= eintrag.datum <= obj.datum_bis for obj in self.betriebsferien
             ),
+            feiertagsname=next((f.feiertagsname for f in self.feiertage if f.datum == eintrag.datum), None),
+            schulferienname=next((s.schulferienname for s in self.schulferien if s.datum_von <= eintrag.datum <= s.datum_bis), None),
         )
 
 
@@ -228,8 +233,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         return Zeiteintrag(
             id=eintrag.id,
             datum=eintrag.datum,
-            uhrzeit_von=eintrag.uhrzeit_von,
-            uhrzeit_bis=eintrag.uhrzeit_bis,
+            uhrzeit_von=time(0, 0, 0) if eintrag.uhrzeit_von is None else eintrag.uhrzeit_von,
+            uhrzeit_bis=time(0, 0, 0) if eintrag.uhrzeit_bis is None else eintrag.uhrzeit_bis,
             pause_beginn=eintrag.pause_beginn,
             pause_ende=eintrag.pause_ende,
             pause2_beginn=eintrag.pause2_beginn,
