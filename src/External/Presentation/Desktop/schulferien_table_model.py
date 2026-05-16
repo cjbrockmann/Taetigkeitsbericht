@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtGui import QColor
+
+from External.Presentation.Desktop.dirty_row_table_mixin import DirtyRowTableModelMixin
 
 
 @dataclass
@@ -14,7 +17,7 @@ class SchulferienRow:
     anmerkung: str
 
 
-class SchulferienTableModel(QAbstractTableModel):
+class SchulferienTableModel(DirtyRowTableModelMixin, QAbstractTableModel):
     HEADERS = [
         "Von",
         "Bis",
@@ -24,6 +27,7 @@ class SchulferienTableModel(QAbstractTableModel):
 
     def __init__(self) -> None:
         super().__init__()
+        self._init_dirty_row_support()
         self._rows: list[SchulferienRow] = []
 
     @property
@@ -55,8 +59,12 @@ class SchulferienTableModel(QAbstractTableModel):
             return str(section + 1)
         return None
 
-    def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> str | None:
-        if not index.isValid() or role not in (Qt.DisplayRole, Qt.EditRole):
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> str | QColor | None:
+        if not index.isValid():
+            return None
+        if role == Qt.ItemDataRole.ForegroundRole:
+            return self.foreground_color_for_index(index)
+        if role not in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
             return None
         row = self._rows[index.row()]
         col = index.column()

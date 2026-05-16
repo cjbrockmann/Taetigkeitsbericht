@@ -47,7 +47,7 @@ class DesktopPresentationDIModule(Module):
         feiertag_registry: FeiertagRegistry,
         stundenplan_anwendung: StundenplanAnwendung,
         stundenplan_registry: StundenplanRegistry,
-        app_config: AppConfig,
+        stundenplan_view_model: StundenplanViewModel,
     ) -> ZeiteintragViewModel:
         return ZeiteintragViewModel(
             anwendung,
@@ -55,9 +55,10 @@ class DesktopPresentationDIModule(Module):
             feiertag_registry,
             stundenplan_anwendung,
             stundenplan_registry,
-            app_config.soll_nach_vertrag_nach_wochentag,
+            stundenplan_view_model,
         )
 
+    @singleton
     @provider
     def provide_stundenplan_view_model(
         self,

@@ -15,6 +15,10 @@ from External.Presentation.Desktop.arbeitszeit_berechnung import (
     parse_uhrzeit_minuten,
 )
 from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
+from External.Presentation.Desktop.table_view_styles import (
+    DIRTY_ROW_TEXT_COLOR,
+    NORMAL_ROW_TEXT_COLOR,
+)
 
 
 def feiertag_stern_icon() -> QIcon:
@@ -104,7 +108,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Optionales Format: HH:MM, z. B. 14:00",
         "Optionales Format: HH:MM, z. B. 14:15",
         "Geleistete Zeit (Bis - Von - beide Pausen), Format HH:MM",
-        "Soll aus Stundenplan (Wochentag + Von), Format HH:MM",
+        "Gesamt-Soll aus Stundenplan (Wochentag), nur erste Zeile je Tag, Format HH:MM",
         "Soll nach Vertrag, Format HH:MM",
         "Freitext (max. 80 Zeichen)",
         "Kalendertag als Text fuer Excel (z. B. 7.)",
@@ -123,7 +127,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         self._dirty_rows: set[int] = set()
         self._feiertag_nach_datum: dict[date, Feiertag] = {}
         self._stundenplan_registry: StundenplanRegistry | None = None
-        self._vertrag_stunden_nach_wochentag: dict[int, str] = {}
 
     @property
     def rows(self) -> list[ZeiteintragRow]:
@@ -194,8 +197,8 @@ class ZeiteintragTableModel(QAbstractTableModel):
             return None
         if role == Qt.ForegroundRole:
             if index.row() in self._dirty_rows:
-                return QColor("#c62828")
-            return QColor("#000000")
+                return QColor(DIRTY_ROW_TEXT_COLOR)
+            return QColor(NORMAL_ROW_TEXT_COLOR)
         if role not in (Qt.DisplayRole, Qt.EditRole):
             return None
         match index.column():
@@ -225,9 +228,9 @@ class ZeiteintragTableModel(QAbstractTableModel):
                     row.pause2_ende,
                 )
             case 9:
-                return self._soll_aus_stundenplan(row)
+                return row.soll_stunden_nach_stundenplan
             case 10:
-                return self._soll_nach_vertrag_fuer_zeile(index.row())
+                return row.soll_stunden_nach_vertrag
             case 11:
                 return row.anmerkung
             case 12:
@@ -364,9 +367,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
     def set_stundenplan_registry(self, registry: StundenplanRegistry | None) -> None:
         self._stundenplan_registry = registry
 
-    def set_vertrag_stunden_nach_wochentag(self, mapping: dict[int, str]) -> None:
-        self._vertrag_stunden_nach_wochentag = dict(mapping)
-
     def stundenplan_soll_aktualisieren(self) -> None:
         if not self._rows:
             return
@@ -389,6 +389,9 @@ class ZeiteintragTableModel(QAbstractTableModel):
         if self._dirty_rows == dirty_rows:
             return
         self._dirty_rows = set(dirty_rows)
+        self.repaint_dirty_rows()
+
+    def repaint_dirty_rows(self) -> None:
         if not self._rows:
             return
         top_left = self.index(0, 0)
@@ -415,7 +418,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 m = self._parse_minutes(gz)
                 if m is not None:
                     geleistet += m
-            sz = self._soll_aus_stundenplan(row)
+            sz = row.soll_stunden_nach_stundenplan
             if sz:
                 m = self._parse_minutes(sz)
                 if m is not None:
@@ -425,10 +428,8 @@ class ZeiteintragTableModel(QAbstractTableModel):
     def summe_soll_nach_vertrag_minuten(self) -> int:
         """Summe Vertrags-Soll: je Kalendertag nur die erste Zeile (wie in Spalte 10)."""
         summe = 0
-        for i, row in enumerate(self._rows):
-            if self._erste_zeilenindex_fuer_datum(row.datum) != i:
-                continue
-            txt = self._soll_nach_vertrag_rohwert(row)
+        for row in self._rows:
+            txt = row.soll_stunden_nach_vertrag.strip() if row.soll_stunden_nach_vertrag else ""
             if not txt:
                 continue
             m = self._parse_minutes(txt)
@@ -498,66 +499,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         except ValueError:
             return None
         return f"{datum.day}."
-
-    def _soll_aus_stundenplan(self, row: ZeiteintragRow) -> str:
-        if self._stundenplan_registry is None:
-            return ""
-        datum_text = row.datum.strip()
-        if not datum_text:
-            return ""
-        try:
-            d = datetime.strptime(datum_text, "%d.%m.%Y").date()
-        except ValueError:
-            return ""
-        if self._feiertag_fuer_datumtext(datum_text) is not None:
-            return ""
-        wochentag = d.isoweekday()
-        if row.uhrzeit_von.strip():
-            return self._stundenplan_registry.soll_fuer(wochentag, row.uhrzeit_von)
-        return self._stundenplan_registry.gesamt_soll_fuer_wochentag(wochentag)
-
-    def _erste_zeilenindex_fuer_datum(self, datum_text: str) -> int | None:
-        ziel = datum_text.strip()
-        if not ziel:
-            return None
-        for i, r in enumerate(self._rows):
-            if r.datum.strip() == ziel:
-                return i
-        return None
-
-    def _soll_nach_vertrag_rohwert(self, row: ZeiteintragRow) -> str:
-        """Vertrags-Soll aus Konfiguration (ohne «nur erste Zeile pro Tag»)."""
-        datum_text = row.datum.strip()
-        if not datum_text:
-            return ""
-        try:
-            d = datetime.strptime(datum_text, "%d.%m.%Y").date()
-        except ValueError:
-            return ""
-        if d.weekday() >= 5:
-            return ""
-        if self._feiertag_fuer_datumtext(datum_text) is not None:
-            return ""
-        txt = (self._vertrag_stunden_nach_wochentag.get(d.isoweekday(), "") or "").strip()
-        if not txt:
-            return ""
-        minuten = self._parse_minutes(txt)
-        if minuten is None or minuten <= 0:
-            return ""
-        return txt
-
-    def _soll_nach_vertrag_fuer_zeile(self, zeilen_index: int) -> str:
-        """Vertrags-Soll nur in der ersten Tabellenzeile je Kalendertag (Arbeitstag)."""
-        if zeilen_index < 0 or zeilen_index >= len(self._rows):
-            return ""
-        row = self._rows[zeilen_index]
-        basis = self._soll_nach_vertrag_rohwert(row)
-        if not basis:
-            return ""
-        erste = self._erste_zeilenindex_fuer_datum(row.datum)
-        if erste is None or zeilen_index != erste:
-            return ""
-        return basis
 
     def _feiertag_fuer_datumtext(self, datum_text: str) -> Feiertag | None:
         text = datum_text.strip()

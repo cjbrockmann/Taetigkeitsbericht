@@ -23,7 +23,11 @@ from PySide6.QtWidgets import (
 
 from External.Presentation.Desktop.krankmeldung_table_model import KrankmeldungRow
 from External.Presentation.Desktop.krankmeldung_view_model import KrankmeldungViewModel
-from External.Presentation.Desktop.table_view_styles import STANDARD_TABLE_VIEW_STYLESHEET
+from External.Presentation.Desktop.form_bearbeitung_dirty import dirty_indices_bei_form_bearbeitung
+from External.Presentation.Desktop.table_view_styles import (
+    DirtyRowItemDelegate,
+    STANDARD_TABLE_VIEW_STYLESHEET,
+)
 
 
 class KrankmeldungView(QWidget):
@@ -145,6 +149,7 @@ class KrankmeldungView(QWidget):
 
         self._table = QTableView(self)
         self._table.setModel(self._view_model.table_model)
+        self._table.setItemDelegate(DirtyRowItemDelegate(self._table))
         self._table.setAlternatingRowColors(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -171,8 +176,42 @@ class KrankmeldungView(QWidget):
         selection_model = self._table.selectionModel()
         if selection_model is not None:
             selection_model.selectionChanged.connect(self._on_tabellen_auswahl_geaendert)
+            selection_model.selectionChanged.connect(self._on_selection_repaint_dirty)
 
         self._aktualisiere_selektions_buttons()
+        self._bind_form_dirty_updates()
+
+    def _bind_form_dirty_updates(self) -> None:
+        self._krank_von_input.dateChanged.connect(self._on_form_changed)
+        self._krank_bis_input.dateChanged.connect(self._on_form_changed)
+        self._krankmeldungstage_spin.valueChanged.connect(self._on_form_changed)
+
+    def _on_form_changed(self, *_args) -> None:
+        self._update_dirty_rows()
+
+    def _on_selection_repaint_dirty(self, *_args) -> None:
+        self._view_model.table_model.repaint_dirty_rows()
+
+    def _form_enthaelt_gespeicherte_zeile(self, row: KrankmeldungRow) -> bool:
+        try:
+            tage_zeile = int(float(row.krankmeldungstage.strip().replace(",", ".")))
+        except ValueError:
+            tage_zeile = -1
+        return (
+            row.krank_von == self._krank_von_input.date().toString("dd.MM.yyyy")
+            and row.krank_bis == self._krank_bis_input.date().toString("dd.MM.yyyy")
+            and tage_zeile == self._krankmeldungstage_spin.value()
+        )
+
+    def _update_dirty_rows(self) -> None:
+        model = self._view_model.table_model
+        model.set_dirty_rows(
+            dirty_indices_bei_form_bearbeitung(
+                model.rows,
+                self._bearbeitungs_id,
+                self._form_enthaelt_gespeicherte_zeile,
+            )
+        )
 
     def _bind_view_model(self) -> None:
         self._view_model.status_changed.connect(self._status_label.setText)
@@ -180,6 +219,7 @@ class KrankmeldungView(QWidget):
 
     def _reset_formular_defaults(self) -> None:
         self._bearbeitungs_id = None
+        self._view_model.table_model.set_dirty_rows(set())
         heute_q = QDate(date.today().year, date.today().month, date.today().day)
         for de in (self._krank_von_input, self._krank_bis_input):
             de.blockSignals(True)
@@ -262,9 +302,11 @@ class KrankmeldungView(QWidget):
         self._zeile_ins_formular(row)
         self._aktualisiere_formular_titel()
         self._aktualisiere_selektions_buttons()
+        self._update_dirty_rows()
 
     def _on_reset(self) -> None:
         self._table.clearSelection()
+        self._view_model.table_model.set_dirty_rows(set())
 
     def _lade_auswahl_jahr(self) -> None:
         self._suspend_selection_sync = True
@@ -275,6 +317,7 @@ class KrankmeldungView(QWidget):
         self._view_model.lade_fuer_jahr(self._jahr_spin.value())
         self._reset_formular_defaults()
         self._aktualisiere_selektions_buttons()
+        self._view_model.table_model.set_dirty_rows(set())
 
     def _on_jahr_changed(self, _value: int) -> None:
         self._lade_auswahl_jahr()

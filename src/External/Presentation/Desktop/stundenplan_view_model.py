@@ -27,6 +27,7 @@ class StundenplanViewModel(QObject):
         self._anwendung = anwendung
         self._stundenplan_registry = stundenplan_registry
         self._table_model = StundenplanTableModel()
+        self._eintraege_cache: list[Stundenplan] = []
         self._zu_loeschende_ids: list[int] = []
 
     @property
@@ -39,6 +40,7 @@ class StundenplanViewModel(QObject):
 
     def lade_alle(self) -> None:
         eintraege = self._anwendung.liste()
+        self._eintraege_cache = list(eintraege)
         rows = [self._map_to_row(eintrag) for eintrag in eintraege]
         self._table_model.set_rows(rows)
         self._zu_loeschende_ids.clear()
@@ -52,6 +54,39 @@ class StundenplanViewModel(QObject):
             self._table_model.rows,
             benachrichtigen=True,
         )
+
+    def stundenplan_eintraege_aus_tabelle(self) -> list[Stundenplan]:
+        """Alle gueltigen Zeilen der Stundenplan-Tabelle als Domain-Objekte."""
+        eintraege: list[Stundenplan] = []
+        for row in self._table_model.rows:
+            if not (row.uhrzeit_von.strip() and row.uhrzeit_bis.strip()):
+                continue
+            try:
+                eintraege.append(
+                    Stundenplan(
+                        id=row.id,
+                        wochentag=row.wochentag,
+                        uhrzeit_von=self._parse_time(row.uhrzeit_von, "uhrzeit_von"),
+                        uhrzeit_bis=self._parse_time(row.uhrzeit_bis, "uhrzeit_bis"),
+                        pause_beginn=self._parse_optional_time(row.pause_beginn),
+                        pause_ende=self._parse_optional_time(row.pause_ende),
+                        pause2_beginn=self._parse_optional_time(row.pause2_beginn),
+                        pause2_ende=self._parse_optional_time(row.pause2_ende),
+                        anmerkung=row.anmerkung or None,
+                    )
+                )
+            except Exception:  # noqa: BLE001
+                continue
+        if eintraege:
+            self._eintraege_cache = list(eintraege)
+        return eintraege
+
+    def aktuelle_stundenplan_eintraege(self) -> list[Stundenplan]:
+        """In-Memory-Liste fuer Soll-Berechnung: Tabelle (inkl. ungespeichert), sonst letzter Stand."""
+        aus_tabelle = self.stundenplan_eintraege_aus_tabelle()
+        if aus_tabelle:
+            return aus_tabelle
+        return list(self._eintraege_cache)
 
     def add_row(self, position: int | None = None, wochentag: int = 1) -> int:
         return self._table_model.add_empty_row(position=position, wochentag=wochentag)

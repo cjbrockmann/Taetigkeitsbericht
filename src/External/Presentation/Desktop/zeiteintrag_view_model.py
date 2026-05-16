@@ -8,8 +8,9 @@ from PySide6.QtCore import QObject, Signal
 
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
-from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung
-from Core.Domain.models.models_worktime import Zeiteintrag, ZeiteintragsDTO
+from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
+from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung, ZeiteintragAnwendungDTO
+from Core.Domain.models.models_worktime import Stundenplan, Zeiteintrag, ZeiteintragsDTO
 from External.Presentation.Desktop.feiertag_registry import FeiertagRegistry
 from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
 from External.Presentation.Desktop.arbeitszeit_berechnung import zeit_aus_text
@@ -28,7 +29,7 @@ class ZeiteintragViewModel(QObject):
         feiertag_registry: FeiertagRegistry,
         stundenplan_anwendung: StundenplanAnwendung,
         stundenplan_registry: StundenplanRegistry,
-        soll_nach_vertrag_nach_wochentag: dict[int, str] | None = None,
+        stundenplan_view_model: StundenplanViewModel | None = None,
     ) -> None:
         super().__init__()
         self._anwendung = anwendung
@@ -36,11 +37,9 @@ class ZeiteintragViewModel(QObject):
         self._feiertag_registry = feiertag_registry
         self._stundenplan_anwendung = stundenplan_anwendung
         self._stundenplan_registry = stundenplan_registry
+        self._stundenplan_view_model = stundenplan_view_model
         self._table_model = ZeiteintragTableModel()
         self._table_model.set_stundenplan_registry(stundenplan_registry)
-        self._table_model.set_vertrag_stunden_nach_wochentag(
-            soll_nach_vertrag_nach_wochentag or {}
-        )
         self._zu_loeschende_ids: list[UUID] = []
         self._geladenes_jahr: int | None = None
         self._geladenes_monat: int | None = None
@@ -77,13 +76,21 @@ class ZeiteintragViewModel(QObject):
         feiertage = self._feiertag_anwendung.liste(jahr=jahr)
         self._feiertag_registry.aktualisiere_jahr(jahr, feiertage, benachrichtigen=False)
 
-        stundenplan_eintraege = self._stundenplan_anwendung.liste()
-        self._stundenplan_registry.aktualisiere_aus_domain(
-            stundenplan_eintraege,
-            benachrichtigen=False,
-        )
+        stundenplan_eintraege = self._stundenplan_eintraege_fuer_soll()
+        if self._stundenplan_view_model is not None:
+            self._stundenplan_registry.aktualisiere_aus_zeilen(
+                self._stundenplan_view_model.table_model.rows,
+                benachrichtigen=False,
+            )
 
-        eintraege = self._anwendung.liste_im_monat(jahr=jahr, monat=monat)
+        if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
+            eintraege = self._anwendung.liste_im_monat(
+                jahr=jahr,
+                monat=monat,
+                stundenplan_eintraege=stundenplan_eintraege,
+            )
+        else:
+            eintraege = self._anwendung.liste_im_monat(jahr=jahr, monat=monat)
         rows = [self._map_to_row(eintrag) for eintrag in eintraege]
 
         self._table_model.set_rows(rows)
@@ -112,8 +119,16 @@ class ZeiteintragViewModel(QObject):
         self._table_model.ergaenze_feiertagsname_in_leerem_kommentar()
         self._table_model.feiertag_darstellung_aktualisieren()
 
+    def _stundenplan_eintraege_fuer_soll(self) -> list[Stundenplan]:
+        """Stundenplan fuer Soll-Berechnung aus der gemeinsamen In-Memory-Liste (kein DB-Zugriff)."""
+        if self._stundenplan_view_model is None:
+            return []
+        return self._stundenplan_view_model.aktuelle_stundenplan_eintraege()
+
     def _auf_stundenplan_geaendert(self) -> None:
-        self._table_model.stundenplan_soll_aktualisieren()
+        if self._geladenes_jahr is None or self._geladenes_monat is None:
+            return
+        self.lade_zeitraum(self._geladenes_jahr, self._geladenes_monat)
 
     def speichere_alle(self) -> bool:
         zeilen_zum_speichern = [

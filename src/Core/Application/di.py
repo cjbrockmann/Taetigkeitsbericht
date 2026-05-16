@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from injector import Binder, Module, provider, singleton
 
+from App.app_config import AppConfig
 from Core.Application.betriebsferien_anwendung import BetriebsferienAnwendung
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.krankmeldung_anwendung import KrankmeldungAnwendung
@@ -82,8 +83,9 @@ class ApplicationDIModule(Module):
         krankmeldung_service: KrankmeldungService,
         schulferien_service: SchulferienService,
         betriebsferien_service: BetriebsferienService,
+        app_config: AppConfig,
     ) -> ZeiteintragAnwendungDTO:
-        return ZeiteintragAnwendungDTO(
+        anwendung = ZeiteintragAnwendungDTO(
             zeiteintrag_service,
             stundenplan_service,
             feiertag_service,
@@ -92,6 +94,10 @@ class ApplicationDIModule(Module):
             schulferien_service,
             betriebsferien_service,
         )
+        anwendung.set_vertrag_stunden_nach_wochentag(
+            app_config.soll_nach_vertrag_nach_wochentag
+        )
+        return anwendung
 
     @singleton
     @provider

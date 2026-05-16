@@ -27,10 +27,13 @@ from External.Presentation.Desktop.stundenplan_table_model import (
     StundenplanRow,
 )
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
-from External.Presentation.Desktop.table_view_styles import STANDARD_TABLE_VIEW_STYLESHEET
+from External.Presentation.Desktop.table_view_styles import (
+    DirtyRowItemDelegate,
+    STANDARD_TABLE_VIEW_STYLESHEET,
+)
 
 
-class StundenplanLiveCommitDelegate(QStyledItemDelegate):
+class StundenplanLiveCommitDelegate(DirtyRowItemDelegate):
     def createEditor(self, parent, option, index):  # noqa: N802
         editor = super().createEditor(parent, option, index)
         if isinstance(editor, QLineEdit):
@@ -55,16 +58,6 @@ class StundenplanLiveCommitDelegate(QStyledItemDelegate):
 
             editor.editingFinished.connect(on_editing_finished)
         return editor
-
-    def paint(self, painter, option, index):  # noqa: N802
-        paint_option = option
-        model = index.model()
-        if hasattr(model, "is_row_dirty"):
-            paint_option = type(option)(option)
-            text_color = "#b71c1c" if model.is_row_dirty(index.row()) else "#000000"
-            paint_option.palette.setColor(QPalette.Text, text_color)
-            paint_option.palette.setColor(QPalette.HighlightedText, text_color)
-        super().paint(painter, paint_option, index)
 
     def setModelData(self, editor, model, index):  # noqa: N802
         if isinstance(editor, QLineEdit):
@@ -406,7 +399,7 @@ class StundenplanView(QWidget):
         for index, row in enumerate(self._view_model.table_model.rows):
             uhrzeit_von = row.uhrzeit_von.strip()
             uhrzeit_bis = row.uhrzeit_bis.strip()
-            if not (uhrzeit_von or uhrzeit_bis):
+            if not uhrzeit_von:
                 continue
             if row.id is None:
                 dirty_rows.add(index)
@@ -427,6 +420,7 @@ class StundenplanView(QWidget):
         return dirty_rows
 
     def _on_selection_changed(self, *_args) -> None:
+        self._view_model.table_model.repaint_dirty_rows()
         self._kopiere_markierte_zellen_in_zwischenablage(silent=True)
 
     def _kopiere_markierte_zellen_in_zwischenablage(self, silent: bool = False) -> None:

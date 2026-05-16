@@ -33,13 +33,17 @@ from External.Presentation.Desktop.feiertag_view import FeiertagView
 from External.Presentation.Desktop.krankmeldung_view import KrankmeldungView
 from External.Presentation.Desktop.schulferien_view import SchulferienView
 from External.Presentation.Desktop.stundenplan_view import StundenplanView
-from External.Presentation.Desktop.table_view_styles import ZEITEINTRAG_TABLE_VIEW_STYLESHEET
+from External.Presentation.Desktop.table_view_styles import (
+    DirtyRowItemDelegate,
+    ZEITEINTRAG_TABLE_VIEW_STYLESHEET,
+    paint_option_mit_zeilenfarbe,
+)
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
 from External.Presentation.Desktop.zeiteintrag_table_model import ZeiteintragTableModel
 from External.Presentation.Desktop.zeiteintrag_view_model import ZeiteintragViewModel
 
 
-class LiveCommitDelegate(QStyledItemDelegate):
+class LiveCommitDelegate(DirtyRowItemDelegate):
     def createEditor(self, parent, option, index):  # noqa: N802
         editor = super().createEditor(parent, option, index)
         if isinstance(editor, QLineEdit):
@@ -64,20 +68,6 @@ class LiveCommitDelegate(QStyledItemDelegate):
 
             editor.editingFinished.connect(on_editing_finished)
         return editor
-
-    def paint(self, painter, option, index):  # noqa: N802
-        model = index.model()
-        if not hasattr(model, "is_row_dirty"):
-            super().paint(painter, option, index)
-            return
-        paint_option = type(option)(option)
-        if model.is_row_dirty(index.row()):
-            farbe = QColor("#c62828")
-        else:
-            farbe = QColor("#000000")
-        paint_option.palette.setColor(QPalette.ColorRole.Text, farbe)
-        paint_option.palette.setColor(QPalette.ColorRole.HighlightedText, farbe)
-        super().paint(painter, paint_option, index)
 
     def setModelData(self, editor, model, index):  # noqa: N802
         if isinstance(editor, QLineEdit):
@@ -106,14 +96,12 @@ class WochentagMitSternDelegate(LiveCommitDelegate):
         self.initStyleOption(opt, index)
 
         model = index.model()
-        if model is not None and hasattr(model, "is_row_dirty"):
-            if model.is_row_dirty(index.row()):
-                opt.palette.setColor(QPalette.ColorRole.Text, QColor("#c62828"))
-                opt.palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#c62828"))
-            else:
-                schwarz = QColor("#000000")
-                opt.palette.setColor(QPalette.ColorRole.Text, schwarz)
-                opt.palette.setColor(QPalette.ColorRole.HighlightedText, schwarz)
+        is_dirty = (
+            model is not None
+            and hasattr(model, "is_row_dirty")
+            and model.is_row_dirty(index.row())
+        )
+        opt = paint_option_mit_zeilenfarbe(opt, is_dirty)
 
         widget = option.widget
         style = widget.style() if widget is not None else None
@@ -538,6 +526,7 @@ class ZeiteintragWindow(QMainWindow):
         self._view_model.table_model.set_dirty_rows(set())
 
     def _on_selection_changed(self, *_args) -> None:
+        self._view_model.table_model.repaint_dirty_rows()
         self._kopiere_markierte_zellen_in_zwischenablage(silent=True)
 
     def _tsv_zeile_fuer_excel_export(

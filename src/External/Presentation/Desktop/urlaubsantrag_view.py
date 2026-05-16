@@ -24,7 +24,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from External.Presentation.Desktop.table_view_styles import STANDARD_TABLE_VIEW_STYLESHEET
+from External.Presentation.Desktop.form_bearbeitung_dirty import dirty_indices_bei_form_bearbeitung
+from External.Presentation.Desktop.table_view_styles import (
+    DirtyRowItemDelegate,
+    STANDARD_TABLE_VIEW_STYLESHEET,
+)
 from External.Presentation.Desktop.urlaubsantrag_table_model import UrlaubsantragRow
 from External.Presentation.Desktop.urlaubsantrag_view_model import UrlaubsantragViewModel
 
@@ -185,6 +189,7 @@ class UrlaubsantragView(QWidget):
 
         self._table = QTableView(self)
         self._table.setModel(self._view_model.table_model)
+        self._table.setItemDelegate(DirtyRowItemDelegate(self._table))
         self._table.setAlternatingRowColors(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -220,8 +225,47 @@ class UrlaubsantragView(QWidget):
         selection_model = self._table.selectionModel()
         if selection_model is not None:
             selection_model.selectionChanged.connect(self._on_tabellen_auswahl_geaendert)
+            selection_model.selectionChanged.connect(self._on_selection_repaint_dirty)
+
+    def _on_selection_repaint_dirty(self, *_args) -> None:
+        self._view_model.table_model.repaint_dirty_rows()
 
         self._aktualisiere_formular_titel()
+        self._bind_form_dirty_updates()
+
+    def _bind_form_dirty_updates(self) -> None:
+        self._datum_von_input.dateChanged.connect(self._on_form_changed)
+        self._datum_bis_input.dateChanged.connect(self._on_form_changed)
+        self._urlaubstyp_input.textChanged.connect(self._on_form_changed)
+        self._urlaubstage_spin.valueChanged.connect(self._on_form_changed)
+        self._genehmigt_check.toggled.connect(self._on_form_changed)
+
+    def _on_form_changed(self, *_args) -> None:
+        self._update_dirty_rows()
+
+    def _form_enthaelt_gespeicherte_zeile(self, row: UrlaubsantragRow) -> bool:
+        genehmigt = "ja" if self._genehmigt_check.isChecked() else "nein"
+        try:
+            stage_zeile = float(row.urlaubstage.strip().replace(",", "."))
+        except ValueError:
+            stage_zeile = -1.0
+        return (
+            row.datum_von == self._datum_von_input.date().toString("dd.MM.yyyy")
+            and row.datum_bis == self._datum_bis_input.date().toString("dd.MM.yyyy")
+            and row.urlaubstyp.strip() == self._urlaubstyp_input.text().strip()
+            and row.genehmigt.strip().lower() == genehmigt
+            and stage_zeile == self._urlaubstage_spin.value()
+        )
+
+    def _update_dirty_rows(self) -> None:
+        model = self._view_model.table_model
+        model.set_dirty_rows(
+            dirty_indices_bei_form_bearbeitung(
+                model.rows,
+                self._bearbeitungs_id,
+                self._form_enthaelt_gespeicherte_zeile,
+            )
+        )
 
     def _bind_view_model(self) -> None:
         self._view_model.status_changed.connect(self._status_label.setText)
@@ -325,6 +369,7 @@ class UrlaubsantragView(QWidget):
         self._bearbeitungs_id = None
         self._reset_formular_defaults()
         self._aktualisiere_formular_titel()
+        self._view_model.table_model.set_dirty_rows(set())
 
     def _on_tabellen_auswahl_geaendert(self, *_args) -> None:
         if self._suspend_selection_sync:
@@ -343,6 +388,7 @@ class UrlaubsantragView(QWidget):
         self._bearbeitungs_id = row.id
         self._zeile_ins_formular(row)
         self._aktualisiere_formular_titel()
+        self._update_dirty_rows()
 
     def _lade_auswahl_jahr(self) -> None:
         self._suspend_selection_sync = True
@@ -353,6 +399,7 @@ class UrlaubsantragView(QWidget):
         self._bearbeitungs_id = None
         self._reset_formular_defaults()
         self._aktualisiere_formular_titel()
+        self._view_model.table_model.set_dirty_rows(set())
 
     def _on_jahr_changed(self, _value: int) -> None:
         self._lade_auswahl_jahr()

@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QColor
 
+from External.Presentation.Desktop.table_view_styles import (
+    DIRTY_ROW_TEXT_COLOR,
+    NORMAL_ROW_TEXT_COLOR,
+)
 from External.Presentation.Desktop.arbeitszeit_berechnung import (
     minuten_als_hh_mm,
     netto_arbeitsminuten,
@@ -114,8 +118,8 @@ class StundenplanTableModel(QAbstractTableModel):
             return QColor("#ffffff")
         if role == Qt.ForegroundRole:
             if index.row() in self._dirty_rows:
-                return QColor("#b71c1c")
-            return QColor("#000000")
+                return QColor(DIRTY_ROW_TEXT_COLOR)
+            return QColor(NORMAL_ROW_TEXT_COLOR)
         if role == Qt.EditRole and index.column() == 0:
             return row.wochentag
         if role not in (Qt.DisplayRole, Qt.EditRole):
@@ -228,6 +232,9 @@ class StundenplanTableModel(QAbstractTableModel):
         if self._dirty_rows == dirty_rows:
             return
         self._dirty_rows = set(dirty_rows)
+        self.repaint_dirty_rows()
+
+    def repaint_dirty_rows(self) -> None:
         if not self._rows:
             return
         top_left = self.index(0, 0)
