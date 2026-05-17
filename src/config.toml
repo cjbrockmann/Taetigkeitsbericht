@@ -31,23 +31,48 @@ prefix_kommentar_betriebsferientage = "B:"
 
 
 
+
+# Zeiteintrag-Tabelle (GUI): Spaltenindex 0–19 (ZeiteintragTableModel.HEADERS).
+# Nur in [zeiteintrag_tabelle].ausgeblendete_spalten eintragen; Daten bleiben im Modell.
+# [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (derzeit max. 12 in der App-Validierung).
+#
+#   0  Tag              — Wochentag (Mo–So), aus Datum, nur Anzeige
+#   1  Datum            — DD.MM.YYYY, bearbeitbar
+#   2  Von              — Arbeitsbeginn HH:MM
+#   3  Bis              — Arbeitsende HH:MM
+#   4  Von              — Pause 1 Beginn (optional)
+#   5  Bis              — Pause 1 Ende (optional)
+#   6  Von              — Pause 2 Beginn (optional)
+#   7  Bis              — Pause 2 Ende (optional)
+#   8  Geleistet        — berechnet / Anwendungsschicht, nur Anzeige
+#   9  Soll             — Soll nach Stundenplan, nur Anzeige
+#  10  Vertrag           — Soll nach Vertrag (Zeile 1 je Tag), nur Anzeige
+#  11  Kommentar         — Freitext max. 80 Zeichen, bearbeitbar
+#  12  Tag               — Kalendertag als Text fuer Excel (z. B. „7.“), nur Anzeige
+#  13  Urlaub            — Kennzeichen Urlaubstag (✓), nur Anzeige
+#  14  Krank             — Kennzeichen Krankheitstag (✓), nur Anzeige
+#  15  Feiertag          — Kennzeichen Feiertag (✓), nur Anzeige
+#  16  Ferien            — Kennzeichen Schulferien (✓), nur Anzeige
+#  17  Betriebsferien    — Kennzeichen Betriebsferien (✓), nur Anzeige
+#  18  Feiertagsname     — Name des Feiertags, nur Anzeige
+#  19  Schulferienname   — Name der Schulferien, nur Anzeige
+#
+
+
 # Stundenplan: Spalten 0–8 nur ausblenden (0 Wochentag, 1–2 Arbeitsphase, 3–4 Pause, 5–6 Pause 2, 7 Soll, 8 Kommentar).
 [stundenplan_tabelle]
-ausgeblendete_spalten = []
-
-
-# Zeiteintrag: Spalten in der Tabelle (0–12) nur ausblenden; Daten bleiben im Modell.
-# [zeiteintrag_excel_export].cell_spec kann ausgeblendete Indizes weiter verwenden.
-[zeiteintrag_tabelle]
 ausgeblendete_spalten = [12]
+
+
+[zeiteintrag_tabelle]
+ausgeblendete_spalten = []
 
 
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).
 #
-# cell_spec — Ausgabereihenfolge:
-#   - Ganze Zahl 0…12 = Quellspalte im Tabellenmodell (0 Tag, 1 Datum, 2–3 Von/Bis,
-#     4–7 Pausen Von/Bis, 8 Geleistet, 9 Soll, 10 Vertrag, 11 Kommentar, 12 Kalendertag als Text z. B. 7.).
-#   - "blank" = leere Zelle (z. B. Platzhalter statt Geleistet/Soll).
+# cell_spec — Ausgabereihenfolge (Spaltenindices siehe Kommentar oben):
+#   - Ganze Zahl 0…19 = Quellspalte im Tabellenmodell
+#   - "blank" = leere Zelle (z. B. Platzhalter statt Geleistet/Soll)
 # include_header — true: erste Zeile mit den gleichen Spaltennamen wie im Modell.
 # leading_empty_columns / trailing_empty_columns — zusaetzliche leere Spalten am Rand jeder Zeile.
 #

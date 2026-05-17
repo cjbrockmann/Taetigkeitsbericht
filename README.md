@@ -41,9 +41,12 @@ Die Sollwerte, Tages-Flags (Urlaub, Feiertag, …) und Kommentarregeln werden in
 - Anzeige nur in der **ersten Tabellenzeile** je Kalendertag.
 - Kein Wert, wenn für den Wochentag in der Config kein Eintrag steht oder die Zeit `0:00` ist.
 - **Feiertage:** Steuert `[sollstunden].sollstunden_an_feiertagen`. Ist der Wert `false` (Standard), entfällt das Vertrags-Soll an Feiertagen; ist er `true`, gilt wie an einem normalen Tag nur der Wochentag aus `wochenstunden`.
-- **Urlaubstage:** Stundenplan-Soll entfällt. In Zeile 1 je Tag werden Vertrags-Soll und **geleistete Stunden** gesetzt (`_berechne_geleistete_stunden`: gleich Vertrags-Soll, unabhängig von Von/Bis). Doppelklick zum Übernehmen aus dem Stundenplan bleibt möglich.
+- **Urlaub- und Krankheitstage:** Stundenplan-Soll entfällt. In Zeile 1 je Tag werden Vertrags-Soll und **geleistete Stunden** gesetzt (`_berechne_geleistete_stunden`: gleich Vertrags-Soll, unabhängig von Von/Bis). Doppelklick zum Übernehmen aus dem Stundenplan bleibt möglich.
 
-**Kommentar an Urlaubstagen** (`kommentar_urlaubstage`, z. B. `"U"`, in `_wende_kommentar_regeln_an`): Nur an Werktagen mit positivem **Vertrags-Soll** (laut `wochenstunden`). Kein `U`/`U:` an **Wochenenden**, an Tagen ohne Vertrags-Soll bzw. mit `0:00`, und an **Feiertagen** (dort ggf. Feiertagsname im leeren Kommentar).
+**Kommentar** (`_wende_kommentar_regeln_an`, aus `[sollstunden]` in der Config):
+- **Krank** (`kommentar_krankheitstage`, z. B. `"K"`): wie Urlaub – leer → nur das Kürzel, sonst `K: {Text}`; nur Mo–Fr mit positivem Vertrags-Soll; nicht an Feiertagen.
+- **Urlaub** (`kommentar_urlaubstage`, z. B. `"U"`): dieselben Regeln, aber nur wenn **nicht** krank (Krank hat Vorrang).
+- An **Feiertagen** nur Feiertagsname im leeren Kommentar, kein K/U.
 
 ### Sollstunden nach Stundenplan
 

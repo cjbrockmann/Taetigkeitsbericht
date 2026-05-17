@@ -99,6 +99,7 @@ class ApplicationDIModule(Module):
         )
         anwendung.set_sollstunden_an_feiertagen(app_config.sollstunden_an_feiertagen)
         anwendung.set_kommentar_urlaubstage(app_config.kommentar_urlaubstage)
+        anwendung.set_kommentar_krankheitstage(app_config.kommentar_krankheitstage)
         return anwendung
 
     @singleton
