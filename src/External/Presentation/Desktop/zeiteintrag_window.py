@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from uuid import UUID
 
-from PySide6.QtCore import QEvent, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt
+from PySide6.QtCore import QEvent, QMimeData, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QCloseEvent,
     QColor,
@@ -38,8 +38,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from App.app_config import ZeiteintragExcelExportSettings
+from App.app_config import (
+    ZeiteintragExcelExportSettings,
+    load_zeiteintrag_excel_export_settings,
+)
 from External.Presentation.Desktop.betriebsferien_view import BetriebsferienView
+from External.Presentation.Desktop.zeiteintrag_excel_clipboard import (
+    ExcelExportZelle,
+    ExcelZelltyp,
+    cell_spec_hat_platzhalter,
+    excel_zelltyp_fuer_spalte,
+    html_tabelle_fuer_excel,
+    tsv_zeile,
+    zellenwerte_fuer_excel,
+)
 from External.Presentation.Desktop.feiertag_view import FeiertagView
 from External.Presentation.Desktop.krankmeldung_view import KrankmeldungView
 from External.Presentation.Desktop.schulferien_view import SchulferienView
@@ -355,7 +367,7 @@ class ZeiteintragWindow(QMainWindow):
         self._baseline_rows: list[tuple[object, str, str, str, str, str, str, str, str]] = []
         self._bestaetigter_tab_index = self._TAB_ZEITEINTRAEGE
         self._tab_wechsel_blockiert = False
-        self.setWindowTitle("Taetigkeitsbericht - Erfassung")
+        self.setWindowTitle("Tätigkeitsbericht – Erfassung")
         self.resize(1200, 640)
         self._build_ui()
         self._bind_view_model()
@@ -375,13 +387,14 @@ class ZeiteintragWindow(QMainWindow):
             self._monat_combo.addItem(f"{monat:02d}", monat)
         self._monat_combo.setCurrentIndex(date.today().month - 1)
 
-        self._laden_button = QPushButton("Zuruecksetzen", self)
+        self._laden_button = QPushButton("Zurücksetzen", self)
         self._laden_button.setEnabled(False)
-        self._excel_kopieren_button = QPushButton("Fuer Excel kopieren", self)
+        self._excel_kopieren_button = QPushButton("Für Excel kopieren", self)
         self._excel_kopieren_button.setToolTip(
-            "Alle Datenzeilen als TSV in die Zwischenablage. "
-            "Ablauf und Kopfzeile: siehe [zeiteintrag_excel_export] in config.toml; "
-            "ausgeblendete Spalten (siehe [zeiteintrag_tabelle]) sind im Export nutzbar."
+            "Alle Datenzeilen tab-getrennt gemäß cell_spec in config.toml "
+            "(Reihenfolge und „blank“-Platzhalter). "
+            "Bei blank: in Excel „Leerzellen überspringen“ beim Einfügen. "
+            "Ausgeblendete Tabellenspalten können in cell_spec trotzdem genutzt werden."
         )
         self._loesch_hinweis_label = QLabel(self)
         self._loesch_hinweis_label.setStyleSheet("color: red;")
@@ -389,10 +402,14 @@ class ZeiteintragWindow(QMainWindow):
             Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
         )
         self._loesch_hinweis_label.hide()
-        self._zeile_hinzufuegen_button = QPushButton("Zeile hinzufuegen", self)
-        self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) loeschen", self)
+        self._zeile_hinzufuegen_button = QPushButton("Zeile hinzufügen", self)
+        self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) löschen", self)
         self._speichern_button = QPushButton("Alle Zeilen speichern", self)
         self._status_label = QLabel("Bereit.", self)
+        self._status_label_timer = QTimer(self)
+        self._status_label_timer.setSingleShot(True)
+        self._status_label_timer.setInterval(10_000)
+        self._status_label_timer.timeout.connect(self._clear_status_label)
         self._summen_label = QLabel("", self)
         self._summen_label.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
@@ -469,7 +486,7 @@ class ZeiteintragWindow(QMainWindow):
         root_layout.addLayout(fuss_layout)
 
         self._tab_widget = QTabWidget(self)
-        self._tab_widget.addTab(zeiteintrag_widget, "Zeiteintraege")
+        self._tab_widget.addTab(zeiteintrag_widget, "Zeiteinträge")
         self._tab_widget.addTab(self._stundenplan_view, "Stundenplan")
         self._tab_widget.addTab(self._urlaubsantrag_view, "Urlaub")
         self._tab_widget.addTab(self._krankmeldung_view, "Krankmeldung")
@@ -497,18 +514,18 @@ class ZeiteintragWindow(QMainWindow):
             selection_model.selectionChanged.connect(self._on_selection_changed)
 
     def _aktualisiere_kommentar_breite(self) -> None:
-        """Kommentarspalte: mindestens KOMMENTAR_MIN_BREITE, sonst restliche Tabellenbreite."""
+        """Kommentarspalte: min. 200 px, Rest der Viewport-Breite; andere Spalten unveraendert."""
         model = self._table.model()
         if model is None:
             return
         header = self._table.horizontalHeader()
-        andere = sum(
+        feste_breite = sum(
             header.sectionSize(col)
             for col in range(model.columnCount())
             if col != ZeiteintragSpalte.KOMMENTAR and not self._table.isColumnHidden(col)
         )
         verfuegbar = max(0, self._table.viewport().width())
-        ziel = max(ZeiteintragSpalte.KOMMENTAR_MIN_BREITE, verfuegbar - andere)
+        ziel = max(ZeiteintragSpalte.KOMMENTAR_MIN_BREITE, verfuegbar - feste_breite)
         if header.sectionSize(ZeiteintragSpalte.KOMMENTAR) != ziel:
             header.resizeSection(ZeiteintragSpalte.KOMMENTAR, ziel)
 
@@ -520,15 +537,34 @@ class ZeiteintragWindow(QMainWindow):
         super().showEvent(event)
         self._aktualisiere_kommentar_breite()
 
+    def _set_status_text(self, text: str) -> None:
+        self._status_label.setText(text)
+        self._status_label_timer.stop()
+        if text:
+            self._status_label_timer.start()
+
+    def _clear_status_label(self) -> None:
+        self._status_label.setText("")
+
     def _bind_view_model(self) -> None:
-        self._view_model.status_changed.connect(self._status_label.setText)
+        self._view_model.status_changed.connect(self._set_status_text)
         self._view_model.error_occurred.connect(self._show_error)
         model = self._view_model.table_model
         model.dataChanged.connect(self._on_model_mutated)
         model.rowsInserted.connect(self._on_model_mutated)
         model.rowsRemoved.connect(self._on_model_mutated)
         model.modelReset.connect(self._on_model_mutated)
+        self._view_model.stammdaten_anreicherung_abgeschlossen.connect(
+            self._on_stammdaten_anreicherung_abgeschlossen
+        )
         self._aktualisiere_summen_anzeige()
+
+    def _on_stammdaten_anreicherung_abgeschlossen(self) -> None:
+        """Nach Feiertags-/Stundenplan-Aenderung: Neuberechnung ist kein manueller Entwurf."""
+        if self._suspend_dirty_tracking:
+            return
+        self._capture_baseline()
+        self._update_dirty_state()
 
     def _aktualisiere_summen_anzeige(self) -> None:
         model = self._view_model.table_model
@@ -568,7 +604,7 @@ class ZeiteintragWindow(QMainWindow):
     def _confirm_discard_unsaved_changes(self) -> bool:
         return frage_ja_nein(
             self,
-            "Ungespeicherte Aenderungen",
+            "Ungespeicherte Änderungen",
             "Es gibt ungespeicherte Zeilen. Beim Wechsel von Jahr/Monat gehen diese verloren. "
             "Trotzdem wechseln?",
         )
@@ -579,17 +615,17 @@ class ZeiteintragWindow(QMainWindow):
         titel = self._tab_widget.tabText(tab_index)
         return frage_ja_nein(
             self,
-            "Ungespeicherte Aenderungen",
-            f"Im Reiter „{titel}“ gibt es ungespeicherte Aenderungen. "
+            "Ungespeicherte Änderungen",
+            f"Im Reiter „{titel}“ gibt es ungespeicherte Änderungen. "
             "Verwerfen und fortfahren?",
         )
 
     def _confirm_close_with_unsaved_changes(self) -> bool:
         return frage_ja_nein(
             self,
-            "Ungespeicherte Aenderungen",
-            "Es gibt ungespeicherte Aenderungen. Beim Schliessen gehen diese verloren. "
-            "Trotzdem schliessen?",
+            "Ungespeicherte Änderungen",
+            "Es gibt ungespeicherte Änderungen. Beim Schließen gehen diese verloren. "
+            "Trotzdem schließen?",
         )
 
     def _tab_has_unsaved(self, tab_index: int) -> bool:
@@ -810,44 +846,100 @@ class ZeiteintragWindow(QMainWindow):
         self._view_model.table_model.repaint_dirty_rows()
         self._kopiere_markierte_zellen_in_zwischenablage(silent=True)
 
-    def _tsv_zeile_fuer_excel_export(
+    def _excel_export_typ_sets(self) -> dict[str, frozenset[int]]:
+        cfg = self._excel_export
+        return {
+            "uhrzeit_spalten": frozenset(cfg.uhrzeit_spalten),
+            "datum_spalten": frozenset(cfg.datum_spalten),
+            "integer_spalten": frozenset(cfg.integer_spalten),
+            "float_spalten": frozenset(cfg.float_spalten),
+        }
+
+    def _laden_excel_export_config(self) -> bool:
+        """cell_spec und Typ-Listen bei jedem Export neu aus config.toml lesen."""
+        try:
+            self._excel_export = load_zeiteintrag_excel_export_settings()
+            return True
+        except (OSError, ValueError, TypeError) as exc:
+            warnung(
+                self,
+                "Excel-Export",
+                f"[zeiteintrag_excel_export] in config.toml konnte nicht gelesen werden.\n"
+                f"Es gilt die letzte gültige Einstellung.\n\n{exc}",
+            )
+            return False
+
+    def _excel_export_zeile(
         self,
         model: ZeiteintragTableModel,
         zeile: int | None,
         parent: QModelIndex,
-    ) -> str:
-        """zeile=None baut die Kopfzeile (Spaltennamen aus dem Modell)."""
+    ) -> list[ExcelExportZelle]:
+        """zeile=None: Kopfzeile. Ausgabe strikt in cell_spec-Reihenfolge."""
         cfg = self._excel_export
-        teile: list[str] = [""] * cfg.leading_empty_columns
+        typ_sets = self._excel_export_typ_sets()
+        zellen: list[ExcelExportZelle] = [
+            ExcelExportZelle(None, "", "", ExcelZelltyp.TEXT)
+            for _ in range(cfg.leading_empty_columns)
+        ]
         for spec in cfg.cell_spec:
             if spec is None:
-                teile.append("")
+                zellen.append(ExcelExportZelle(None, "", "", ExcelZelltyp.BLANK))
             elif zeile is None:
-                teile.append(ZeiteintragTableModel.HEADERS[spec])
+                kopf = ZeiteintragTableModel.HEADERS[spec]
+                zellen.append(ExcelExportZelle(spec, kopf, kopf, ExcelZelltyp.TEXT))
             else:
                 wert = model.data(model.index(zeile, spec, parent), Qt.DisplayRole)
-                teile.append("" if wert is None else str(wert))
-        teile.extend([""] * cfg.trailing_empty_columns)
-        return "\t".join(teile)
+                roh = "" if wert is None else str(wert)
+                typ = excel_zelltyp_fuer_spalte(spec, **typ_sets)
+                tsv, anzeige = zellenwerte_fuer_excel(roh, typ)
+                zellen.append(ExcelExportZelle(spec, tsv, anzeige, typ))
+        zellen.extend(
+            ExcelExportZelle(None, "", "", ExcelZelltyp.TEXT)
+            for _ in range(cfg.trailing_empty_columns)
+        )
+        return zellen
 
     def _kopiere_tabelle_fuer_excel(self) -> None:
-        """TSV gemaess config.toml [zeiteintrag_excel_export]."""
+        """TSV gemaess cell_spec; optional HTML fuer Excel-Zahlformate."""
+        self._laden_excel_export_config()
         model = self._view_model.table_model
         parent = QModelIndex()
-        zeilen: list[str] = []
-        if self._excel_export.include_header:
-            zeilen.append(self._tsv_zeile_fuer_excel_export(model, None, parent))
+        cfg = self._excel_export
+        zeilen: list[list[ExcelExportZelle]] = []
+        if cfg.include_header:
+            zeilen.append(self._excel_export_zeile(model, None, parent))
         n = model.rowCount(parent)
         for r in range(n):
-            zeilen.append(self._tsv_zeile_fuer_excel_export(model, r, parent))
-        text = "\n".join(zeilen)
+            zeilen.append(self._excel_export_zeile(model, r, parent))
+        text = "\n".join(tsv_zeile(row) for row in zeilen)
         clipboard = QGuiApplication.clipboard()
         if clipboard is None:
             return
-        clipboard.setText(text)
-        kopf_hinweis = " mit Kopfzeile" if self._excel_export.include_header else ""
-        self._status_label.setText(
-            f"{n} Datenzeile(n){kopf_hinweis} fuer Excel in die Zwischenablage kopiert."
+        # HTML ueberschreibt leere Platzhalter in Excel; mit „blank“ nur TSV (Leerzellen ueberspringen).
+        html_aktiv = cfg.html_formatierung and not cell_spec_hat_platzhalter(cfg.cell_spec)
+        if html_aktiv:
+            html = html_tabelle_fuer_excel(
+                zeilen,
+                text_spalten=frozenset(cfg.text_spalten),
+                kopfzeile=cfg.include_header,
+            )
+            mime = QMimeData()
+            mime.setText(text)
+            mime.setHtml(html)
+            clipboard.setMimeData(mime)
+        else:
+            clipboard.setText(text)
+        spalten = len(zeilen[0]) if zeilen else len(cfg.cell_spec)
+        kopf_hinweis = " mit Kopfzeile" if cfg.include_header else ""
+        platzhalter_hinweis = ""
+        if cell_spec_hat_platzhalter(cfg.cell_spec):
+            platzhalter_hinweis = (
+                " — in Excel mit Strg-V einfügen"
+            )
+        self._set_status_text(
+            f"{n} Datenzeile(n){kopf_hinweis}, {spalten} Spalte(n) "
+            f"(cell_spec) kopiert.{platzhalter_hinweis}"
         )
 
     def _kopiere_markierte_zellen_in_zwischenablage(self, silent: bool = False) -> None:
@@ -880,12 +972,12 @@ class ZeiteintragWindow(QMainWindow):
 
         if not silent:
             zeilen_anzahl = len(zeilen_texte)
-            self._status_label.setText(
+            self._set_status_text(
                 f"{zeilen_anzahl} Zeile(n) in die Zwischenablage kopiert."
             )
 
     def _on_table_double_clicked(self, index) -> None:
-        if index.column() != 1:
+        if index.column() != ZeiteintragSpalte.DATUM:
             return
         model = self._view_model.table_model
         row_idx = index.row()
@@ -894,9 +986,6 @@ class ZeiteintragWindow(QMainWindow):
         if not datum_text:
             datum_text = date.today().strftime("%d.%m.%Y")
             model.setData(index, datum_text)
-
-        if row.uhrzeit_von.strip() or row.uhrzeit_bis.strip():
-            return
 
         try:
             datum = datetime.strptime(datum_text, "%d.%m.%Y").date()
@@ -924,24 +1013,15 @@ class ZeiteintragWindow(QMainWindow):
         if eintrags_index >= len(passende_stundenplan_zeilen):
             return
         stundenplan_zeile = passende_stundenplan_zeilen[eintrags_index]
+        self._view_model.uebernehme_stundenplan_in_zeile(row_idx, stundenplan_zeile)
 
-        feld_zu_spalte = {
-            "uhrzeit_von": ZeiteintragSpalte.VON,
-            "uhrzeit_bis": ZeiteintragSpalte.BIS,
-            "pause_beginn": ZeiteintragSpalte.PAUSE1_VON,
-            "pause_ende": ZeiteintragSpalte.PAUSE1_BIS,
-            "pause2_beginn": ZeiteintragSpalte.PAUSE2_VON,
-            "pause2_ende": ZeiteintragSpalte.PAUSE2_BIS,
-            "anmerkung": ZeiteintragSpalte.KOMMENTAR,
-        }
-        for feldname, spalte in feld_zu_spalte.items():
-            zielwert = getattr(row, feldname).strip()
-            if zielwert:
-                continue
-            quellwert = getattr(stundenplan_zeile, feldname).strip()
-            if not quellwert:
-                continue
-            model.setData(model.index(row_idx, spalte), quellwert)
+        row = model.rows[row_idx]
+        if not row.anmerkung.strip():
+            kommentar = stundenplan_zeile.anmerkung.strip()
+            if kommentar:
+                model.setData(
+                    model.index(row_idx, ZeiteintragSpalte.KOMMENTAR), kommentar
+                )
 
     def _show_error(self, message: str) -> None:
         warnung(self, "Fehler beim Speichern/Laden", message)
@@ -990,7 +1070,7 @@ class ZeiteintragWindow(QMainWindow):
             self._loesch_hinweis_label.hide()
         else:
             wort = "Zeile" if anzahl == 1 else "Zeilen"
-            self._loesch_hinweis_label.setText(f"{anzahl} {wort} zu loeschen")
+            self._loesch_hinweis_label.setText(f"{anzahl} {wort} zu löschen")
             self._loesch_hinweis_label.show()
 
     def _update_dirty_state(self) -> None:

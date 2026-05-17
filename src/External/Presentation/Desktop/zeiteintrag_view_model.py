@@ -14,12 +14,18 @@ from Core.Domain.models.models_worktime import Stundenplan, Zeiteintrag, Zeitein
 from External.Presentation.Desktop.feiertag_registry import FeiertagRegistry
 from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
 from External.Presentation.Desktop.arbeitszeit_berechnung import zeit_aus_text
-from External.Presentation.Desktop.zeiteintrag_table_model import ZeiteintragRow, ZeiteintragTableModel
+from External.Presentation.Desktop.stundenplan_table_model import StundenplanRow
+from External.Presentation.Desktop.zeiteintrag_table_model import (
+    ZeiteintragRow,
+    ZeiteintragSpalte,
+    ZeiteintragTableModel,
+)
 
 
 class ZeiteintragViewModel(QObject):
     status_changed = Signal(str)
     error_occurred = Signal(str)
+    stammdaten_anreicherung_abgeschlossen = Signal()
     _selectedYear: int | None = None
 
     def __init__(
@@ -48,10 +54,126 @@ class ZeiteintragViewModel(QObject):
         self._stundenplan_registry.stundenplan_geaendert.connect(self._auf_stundenplan_geaendert)
         self._table_model.dataChanged.connect(self._on_table_data_changed)
 
+    @staticmethod
+    def _ist_ueberstunden_platzhalter_row(row: ZeiteintragRow) -> bool:
+        """uhrzeit_von = uhrzeit_bis (z. B. 00:00/00:00) gilt als noch nicht belegt."""
+        von_t = zeit_aus_text(row.uhrzeit_von.strip())
+        bis_t = zeit_aus_text(row.uhrzeit_bis.strip())
+        return von_t is not None and bis_t is not None and von_t == bis_t
+
+    @staticmethod
+    def _arbeitszeit_feld_fuer_stundenplan_uebernehmbar(
+        row: ZeiteintragRow, feldname: str
+    ) -> bool:
+        if not getattr(row, feldname).strip():
+            return True
+        return ZeiteintragViewModel._ist_ueberstunden_platzhalter_row(row)
+
+    @staticmethod
+    def _format_uhrzeit_fuer_zeile(
+        uhrzeit_von: time | None, uhrzeit_bis: time | None
+    ) -> tuple[str, str]:
+        """Nur fuer vollstaendige DTOs beim Laden (DB); nicht bei Teileingabe in der Tabelle."""
+        if uhrzeit_von is None or uhrzeit_bis is None:
+            return ("", "")
+        if uhrzeit_von == uhrzeit_bis:
+            return ("", "")
+        return (uhrzeit_von.strftime("%H:%M"), uhrzeit_bis.strftime("%H:%M"))
+
+    @staticmethod
+    def _parse_arbeitszeitfelder_aus_zeile(
+        von_text: str, bis_text: str
+    ) -> tuple[time | None, time | None]:
+        """Von/Bis einzeln parsen (Teileingabe bleibt erhalten)."""
+        von: time | None = None
+        bis: time | None = None
+        if von_text.strip():
+            try:
+                von = ZeiteintragViewModel._parse_optional_time(von_text)
+            except ValueError:
+                pass
+        if bis_text.strip():
+            try:
+                bis = ZeiteintragViewModel._parse_optional_time(bis_text)
+            except ValueError:
+                pass
+        return von, bis
+
+    @staticmethod
+    def _apply_arbeitszeit_aus_dto(
+        row: ZeiteintragRow,
+        dto_von: time | None,
+        dto_bis: time | None,
+    ) -> None:
+        """DTO -> Zeile; unvollstaendige Von/Bis-Eingabe nicht loeschen."""
+        if dto_von is not None and dto_bis is not None:
+            if dto_von == dto_bis:
+                row.uhrzeit_von = ""
+                row.uhrzeit_bis = ""
+            else:
+                row.uhrzeit_von = dto_von.strftime("%H:%M")
+                row.uhrzeit_bis = dto_bis.strftime("%H:%M")
+            return
+        if dto_von is not None:
+            row.uhrzeit_von = dto_von.strftime("%H:%M")
+        elif not row.uhrzeit_von.strip():
+            row.uhrzeit_von = ""
+        if dto_bis is not None:
+            row.uhrzeit_bis = dto_bis.strftime("%H:%M")
+        elif not row.uhrzeit_bis.strip():
+            row.uhrzeit_bis = ""
 
     @property
     def table_model(self) -> ZeiteintragTableModel:
         return self._table_model
+
+    def uebernehme_stundenplan_in_zeile(
+        self, row_index: int, stundenplan: StundenplanRow
+    ) -> bool:
+        """
+        Uebernimmt Von/Bis aus dem Stundenplan (nur in leere Zellen).
+        Wenn beide gesetzt wurden, auch Pausen (ueberschreibend).
+        Anreicherung wird bis zum Ende ausgesetzt, damit Pausen nicht sofort wieder geloescht werden.
+        """
+        if row_index < 0 or row_index >= len(self._table_model.rows):
+            return False
+        row = self._table_model.rows[row_index]
+        model = self._table_model
+        arbeitszeit_uebernommen = {"uhrzeit_von": False, "uhrzeit_bis": False}
+
+        self._suspend_anreicherung = True
+        try:
+            for feldname, spalte in (
+                ("uhrzeit_von", ZeiteintragSpalte.VON),
+                ("uhrzeit_bis", ZeiteintragSpalte.BIS),
+            ):
+                if not self._arbeitszeit_feld_fuer_stundenplan_uebernehmbar(row, feldname):
+                    continue
+                quellwert = getattr(stundenplan, feldname).strip()
+                if not quellwert:
+                    continue
+                model.setData(model.index(row_index, spalte), quellwert)
+                arbeitszeit_uebernommen[feldname] = True
+
+            if all(arbeitszeit_uebernommen.values()):
+                for feldname, spalte in (
+                    ("pause_beginn", ZeiteintragSpalte.PAUSE1_VON),
+                    ("pause_ende", ZeiteintragSpalte.PAUSE1_BIS),
+                    ("pause2_beginn", ZeiteintragSpalte.PAUSE2_VON),
+                    ("pause2_ende", ZeiteintragSpalte.PAUSE2_BIS),
+                ):
+                    quellwert = getattr(stundenplan, feldname).strip()
+                    model.setData(model.index(row_index, spalte), quellwert)
+        finally:
+            self._suspend_anreicherung = False
+
+        datum_text = row.datum.strip()
+        if datum_text:
+            try:
+                self._anreichere_tage({self._parse_date(datum_text)})
+            except ValueError:
+                pass
+        return all(arbeitszeit_uebernommen.values())
 
     @property
     def zu_loeschende_ids(self) -> list[UUID]:
@@ -120,7 +242,7 @@ class ZeiteintragViewModel(QObject):
         self._geladenes_monat = monat
         self._zu_loeschende_ids.clear()
         self.status_changed.emit(
-            f"{len(rows)} Zeile(n) fuer {monat:02d}/{jahr} geladen ({len(eintraege)} aus Datenbank)."
+            f"{len(rows)} Zeile(n) für {monat:02d}/{jahr} geladen ({len(eintraege)} aus Datenbank)."
         )
 
     def _auf_feiertage_geaendert(self, jahr: int) -> None:
@@ -136,6 +258,7 @@ class ZeiteintragViewModel(QObject):
         )
         self._anreichere_alle_zeilen_in_tabelle()
         self._table_model.feiertag_darstellung_aktualisieren()
+        self.stammdaten_anreicherung_abgeschlossen.emit()
 
     def _on_table_data_changed(self, top_left, bottom_right, roles) -> None:
         if self._suspend_anreicherung:
@@ -246,7 +369,7 @@ class ZeiteintragViewModel(QObject):
 
         if not zeilen_zum_speichern and not gibt_loeschungen:
             self.error_occurred.emit(
-                "Es gibt keine Aenderungen zum Speichern."
+                "Es gibt keine Änderungen zum Speichern."
             )
             return False
 
@@ -258,7 +381,7 @@ class ZeiteintragViewModel(QObject):
                 if self._anwendung.loesche_per_id(eintrag_id):
                     geloescht += 1
             except Exception as exc:  # noqa: BLE001
-                fehler.append(f"Loeschen {eintrag_id}: {exc}")
+                fehler.append(f"Löschen {eintrag_id}: {exc}")
                 verbleibende_loeschungen.append(eintrag_id)
         self._zu_loeschende_ids = verbleibende_loeschungen
 
@@ -291,7 +414,7 @@ class ZeiteintragViewModel(QObject):
         if fehler:
             self.error_occurred.emit("\n".join(fehler))
         self.status_changed.emit(
-            f"{erfolgreich} Zeile(n) gespeichert, {geloescht} geloescht, {len(fehler)} Fehler."
+            f"{erfolgreich} Zeile(n) gespeichert, {geloescht} gelöscht, {len(fehler)} Fehler."
         )
         return not fehler
 
@@ -333,7 +456,7 @@ class ZeiteintragViewModel(QObject):
             return None, None
         if fuer_speichern and (von_leer ^ bis_leer):
             raise ValueError(
-                "Pause von und Pause bis muessen gemeinsam angegeben werden."
+                "Pause von und Pause bis müssen gemeinsam angegeben werden."
             )
         von = ZeiteintragViewModel._parse_optional_time(von_text)
         bis = ZeiteintragViewModel._parse_optional_time(bis_text)
@@ -342,18 +465,64 @@ class ZeiteintragViewModel(QObject):
         return None, None
 
     @staticmethod
+    def _parse_pausenfelder_aus_zeile(
+        von_text: str, bis_text: str
+    ) -> tuple[time | None, time | None]:
+        """Einzelne Pausenfelder fuer Anreicherung (Teileingabe bleibt erhalten)."""
+        von: time | None = None
+        bis: time | None = None
+        if von_text.strip():
+            try:
+                von = ZeiteintragViewModel._parse_optional_time(von_text)
+            except ValueError:
+                pass
+        if bis_text.strip():
+            try:
+                bis = ZeiteintragViewModel._parse_optional_time(bis_text)
+            except ValueError:
+                pass
+        return von, bis
+
+    @staticmethod
+    def _apply_pause_paar_aus_dto(
+        row: ZeiteintragRow,
+        von_attr: str,
+        bis_attr: str,
+        dto_von: time | None,
+        dto_bis: time | None,
+    ) -> None:
+        """DTO -> Zeile; unvollstaendige Eingabe in der Zeile nicht loeschen."""
+        zeile_von = getattr(row, von_attr)
+        zeile_bis = getattr(row, bis_attr)
+        if dto_von is not None and dto_bis is not None:
+            setattr(row, von_attr, dto_von.strftime("%H:%M"))
+            setattr(row, bis_attr, dto_bis.strftime("%H:%M"))
+            return
+        if dto_von is not None:
+            setattr(row, von_attr, dto_von.strftime("%H:%M"))
+        elif not zeile_von.strip():
+            setattr(row, von_attr, "")
+        if dto_bis is not None:
+            setattr(row, bis_attr, dto_bis.strftime("%H:%M"))
+        elif not zeile_bis.strip():
+            setattr(row, bis_attr, "")
+
+    @staticmethod
     def _row_to_dto(row: ZeiteintragRow) -> ZeiteintragsDTO:
-        pause1_von, pause1_bis = ZeiteintragViewModel._parse_pausenpaar(
+        pause1_von, pause1_bis = ZeiteintragViewModel._parse_pausenfelder_aus_zeile(
             row.pause_beginn, row.pause_ende
         )
-        pause2_von, pause2_bis = ZeiteintragViewModel._parse_pausenpaar(
+        pause2_von, pause2_bis = ZeiteintragViewModel._parse_pausenfelder_aus_zeile(
             row.pause2_beginn, row.pause2_ende
+        )
+        arbeitszeit_von, arbeitszeit_bis = ZeiteintragViewModel._parse_arbeitszeitfelder_aus_zeile(
+            row.uhrzeit_von, row.uhrzeit_bis
         )
         return ZeiteintragsDTO(
             id=row.id,
             datum=ZeiteintragViewModel._parse_date(row.datum),
-            uhrzeit_von=ZeiteintragViewModel._parse_optional_time(row.uhrzeit_von),
-            uhrzeit_bis=ZeiteintragViewModel._parse_optional_time(row.uhrzeit_bis),
+            uhrzeit_von=arbeitszeit_von,
+            uhrzeit_bis=arbeitszeit_bis,
             pause_beginn=pause1_von,
             pause_ende=pause1_bis,
             pause2_beginn=pause2_von,
@@ -364,23 +533,18 @@ class ZeiteintragViewModel(QObject):
     @staticmethod
     def _apply_dto_to_row(row: ZeiteintragRow, eintrag: ZeiteintragsDTO) -> None:
         row.datum = eintrag.datum.strftime("%d.%m.%Y")
-        row.uhrzeit_von = (
-            eintrag.uhrzeit_von.strftime("%H:%M") if eintrag.uhrzeit_von else ""
+        ZeiteintragViewModel._apply_arbeitszeit_aus_dto(
+            row, eintrag.uhrzeit_von, eintrag.uhrzeit_bis
         )
-        row.uhrzeit_bis = (
-            eintrag.uhrzeit_bis.strftime("%H:%M") if eintrag.uhrzeit_bis else ""
+        ZeiteintragViewModel._apply_pause_paar_aus_dto(
+            row, "pause_beginn", "pause_ende", eintrag.pause_beginn, eintrag.pause_ende
         )
-        row.pause_beginn = (
-            eintrag.pause_beginn.strftime("%H:%M") if eintrag.pause_beginn else ""
-        )
-        row.pause_ende = (
-            eintrag.pause_ende.strftime("%H:%M") if eintrag.pause_ende else ""
-        )
-        row.pause2_beginn = (
-            eintrag.pause2_beginn.strftime("%H:%M") if eintrag.pause2_beginn else ""
-        )
-        row.pause2_ende = (
-            eintrag.pause2_ende.strftime("%H:%M") if eintrag.pause2_ende else ""
+        ZeiteintragViewModel._apply_pause_paar_aus_dto(
+            row,
+            "pause2_beginn",
+            "pause2_ende",
+            eintrag.pause2_beginn,
+            eintrag.pause2_ende,
         )
         row.anmerkung = eintrag.anmerkung or ""
         row.geleistete_stunden = (
@@ -408,11 +572,14 @@ class ZeiteintragViewModel(QObject):
 
     @staticmethod
     def _map_to_row(eintrag: ZeiteintragsDTO) -> ZeiteintragRow:
+        von_text, bis_text = ZeiteintragViewModel._format_uhrzeit_fuer_zeile(
+            eintrag.uhrzeit_von, eintrag.uhrzeit_bis
+        )
         return ZeiteintragRow(
             id=eintrag.id,
             datum=eintrag.datum.strftime("%d.%m.%Y"),
-            uhrzeit_von=eintrag.uhrzeit_von.strftime("%H:%M") if eintrag.uhrzeit_von else "",
-            uhrzeit_bis=eintrag.uhrzeit_bis.strftime("%H:%M") if eintrag.uhrzeit_bis else "",
+            uhrzeit_von=von_text,
+            uhrzeit_bis=bis_text,
             pause_beginn=eintrag.pause_beginn.strftime("%H:%M")
             if eintrag.pause_beginn
             else "",

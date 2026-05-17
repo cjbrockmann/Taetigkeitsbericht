@@ -98,7 +98,7 @@ class BetriebsferienView(QWidget):
             de.setFixedWidth(de.sizeHint().width())
 
         self._name_input = QLineEdit(self._form_group)
-        self._name_input.setPlaceholderText("z. B. Betriebsschliessung")
+        self._name_input.setPlaceholderText("z. B. Betriebsschließung")
         self._anmerkung_input = QLineEdit(self._form_group)
         self._anmerkung_input.setPlaceholderText("optional")
 
@@ -112,9 +112,9 @@ class BetriebsferienView(QWidget):
         self._reset_button = QPushButton("Reset", self)
         self._reset_button.setStyleSheet("QPushButton { color: blue; }")
         self._reset_button.setToolTip(
-            "Markierung aufheben, Formular zuruecksetzen, Von/Bis auf heute."
+            "Markierung aufheben, Formular zurücksetzen, Von/Bis auf heute."
         )
-        self._loeschen_button = QPushButton("Markierte Zeile loeschen", self)
+        self._loeschen_button = QPushButton("Markierte Zeile löschen", self)
         self._loeschen_button.setStyleSheet("QPushButton { color: red; }")
 
         _btn_breite = 220

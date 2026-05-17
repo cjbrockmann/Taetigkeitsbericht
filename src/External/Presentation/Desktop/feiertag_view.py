@@ -68,7 +68,7 @@ class FeiertagView(QWidget):
         self._offiziell_check = QCheckBox("Offiziell (gesetzlich)", self)
         self._offiziell_check.setChecked(True)
         self._hinzufuegen_button = QPushButton("Feiertag hinzufügen", self)
-        self._loeschen_button = QPushButton("Markierten Tag loeschen", self)
+        self._loeschen_button = QPushButton("Markierten Tag löschen", self)
 
         add_layout.addWidget(self._datum_input)
         add_layout.addWidget(self._bezeichnung_input)
@@ -113,10 +113,14 @@ class FeiertagView(QWidget):
 
     @property
     def has_unsaved_changes(self) -> bool:
+        """Entwurf im Formular „Feiertag hinzufügen“ (nicht Tabellenzeilen — die speichern sofort)."""
         return bool(self._bezeichnung_input.text().strip())
 
-    def verwerfe_ungespeicherte_aenderungen(self) -> None:
+    def _reset_neuanlage_formular(self) -> None:
         self._bezeichnung_input.clear()
+
+    def verwerfe_ungespeicherte_aenderungen(self) -> None:
+        self._reset_neuanlage_formular()
         self._lade_auswahl_jahr()
 
     def _lade_auswahl_jahr(self) -> None:
@@ -139,6 +143,7 @@ class FeiertagView(QWidget):
                 ist_halber_tag=self._halber_tag_check.isChecked(),
                 ist_offiziell=self._offiziell_check.isChecked(),
             )
+            self._reset_neuanlage_formular()
         except Exception as exc:  # noqa: BLE001
             self._show_error(str(exc))
 

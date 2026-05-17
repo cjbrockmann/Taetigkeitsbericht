@@ -66,20 +66,34 @@ ausgeblendete_spalten = []
 
 [zeiteintrag_tabelle]
 # Spalte 17 = Kalendertag fuer Excel (nur Export, bleibt fuer cell_spec erhalten)
-ausgeblendete_spalten = [17]
+ausgeblendete_spalten = [17,18,19]
 
 
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).
 #
-# cell_spec — Ausgabereihenfolge (Spaltenindices siehe Kommentar oben):
-#   - Ganze Zahl 0…19 = Quellspalte im Tabellenmodell
-#   - "blank" = leere Zelle (z. B. Platzhalter statt Geleistet/Soll)
+# cell_spec — Spaltenreihenfolge beim Einfuegen in Excel (Quellindices 0…19):
+#   - Zahl = Wert aus dieser Tabellenspalte (z. B. 0 Wochentag, 17 Kalendertag, 7 Von, 8 Bis, 16 Kommentar)
+#   - "blank" = leere Zelle: vorhandene Excel-Zellen an dieser Position nicht ueberschreiben
+#     (in Excel: Einfuegen > Inhalte einfuegen > Leerzellen ueberspringen)
+# Beispiel unten: Mo, Tag, Von…Bis/Pausen, [Geleistet], [Soll], Kommentar
 # include_header — true: erste Zeile mit den gleichen Spaltennamen wie im Modell.
 # leading_empty_columns / trailing_empty_columns — zusaetzliche leere Spalten am Rand jeder Zeile.
+# uhrzeit_spalten — Excel-Datentyp Uhrzeit (TSV: Tagesbruchteil, HTML: HH:MM:SS)
+# datum_spalten — Excel-Datentyp Datum (TSV: Serienzahl, HTML: DD.MM.YYYY)
+# integer_spalten / float_spalten — Excel-Zahl (leer = keine Spalte)
+# text_spalten — Excel-Datentyp Text (z. B. [17] Kalendertag „7.“)
+# html_formatierung — false: nur TSV; bei „blank“ in cell_spec immer nur TSV (Leerzellen ueberspringen)
+# Pro Spaltenindex nur in einer Typ-Liste; Aenderungen an cell_spec gelten nach Speichern sofort.
 #
 [zeiteintrag_excel_export]
 include_header = false
 leading_empty_columns = 0
 trailing_empty_columns = 0
+html_formatierung = true
+uhrzeit_spalten = [7, 8, 9, 10, 11, 12]
+datum_spalten = [1]
+integer_spalten = []
+float_spalten = []
+text_spalten = [17]
 cell_spec = [ 0, 17, 7, 8, 9, 10, 11, 12, "blank", "blank", 16]
 

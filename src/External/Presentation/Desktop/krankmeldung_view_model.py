@@ -70,11 +70,11 @@ class KrankmeldungViewModel(QObject):
 
     def loesche_nach_id(self, eintrag_id: int | None) -> bool:
         if eintrag_id is None:
-            self.error_occurred.emit("Ungueltige Auswahl (keine Id).")
+            self.error_occurred.emit("Ungültige Auswahl (keine Id).")
             return False
         geloescht = self._anwendung.loesche(eintrag_id)
         if geloescht:
-            self.status_changed.emit("Krankmeldung geloescht.")
+            self.status_changed.emit("Krankmeldung gelöscht.")
         else:
             self.status_changed.emit("Eintrag nicht gefunden.")
         return geloescht

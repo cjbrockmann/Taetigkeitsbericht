@@ -6,6 +6,12 @@ from typing import Any, Final
 
 import tomllib
 
+DEFAULT_ZEITEINTRAG_EXCEL_UHRZEIT_SPALTEN: tuple[int, ...] = (7, 8, 9, 10, 11, 12)
+DEFAULT_ZEITEINTRAG_EXCEL_DATUM_SPALTEN: tuple[int, ...] = (1,)
+DEFAULT_ZEITEINTRAG_EXCEL_INTEGER_SPALTEN: tuple[int, ...] = ()
+DEFAULT_ZEITEINTRAG_EXCEL_FLOAT_SPALTEN: tuple[int, ...] = ()
+DEFAULT_ZEITEINTRAG_EXCEL_TEXT_SPALTEN: tuple[int, ...] = (17,)
+
 DEFAULT_ZEITEINTRAG_EXCEL_CELL_SPEC: tuple[int | None, ...] = (
     0,
     17,
@@ -107,16 +113,40 @@ def _parse_ausgeblendete_spalten(
 
 @dataclass(frozen=True)
 class ZeiteintragExcelExportSettings:
-    """Einstellungen fuer „Fuer Excel kopieren“ (TSV in Zwischenablage)."""
+    """Einstellungen fuer „Fuer Excel kopieren“ (TSV + HTML in Zwischenablage)."""
 
     include_header: bool = False
     leading_empty_columns: int = 0
     trailing_empty_columns: int = 0
     cell_spec: tuple[int | None, ...] = DEFAULT_ZEITEINTRAG_EXCEL_CELL_SPEC
+    uhrzeit_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_UHRZEIT_SPALTEN
+    datum_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_DATUM_SPALTEN
+    integer_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_INTEGER_SPALTEN
+    float_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_FLOAT_SPALTEN
+    text_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_TEXT_SPALTEN
+    html_formatierung: bool = True
 
     def __post_init__(self) -> None:
         if self.leading_empty_columns < 0 or self.trailing_empty_columns < 0:
             raise ValueError("leading/trailing_empty_columns duerfen nicht negativ sein.")
+        typen = (
+            ("uhrzeit_spalten", self.uhrzeit_spalten),
+            ("datum_spalten", self.datum_spalten),
+            ("integer_spalten", self.integer_spalten),
+            ("float_spalten", self.float_spalten),
+            ("text_spalten", self.text_spalten),
+        )
+        for name_a, spalten_a in typen:
+            set_a = set(spalten_a)
+            for name_b, spalten_b in typen:
+                if name_a >= name_b:
+                    continue
+                overlap = set_a & set(spalten_b)
+                if overlap:
+                    raise ValueError(
+                        f"zeiteintrag_excel_export: Spalte(n) {sorted(overlap)} "
+                        f"in {name_a} und {name_b} – nur ein Eintrag pro Spalte."
+                    )
 
 
 @dataclass(frozen=True)
@@ -146,6 +176,59 @@ def _section_zeiteintrag_excel_export(data: dict[str, Any]) -> ZeiteintragExcelE
         leading_empty_columns=int(sec.get("leading_empty_columns", 0)),
         trailing_empty_columns=int(sec.get("trailing_empty_columns", 0)),
         cell_spec=_parse_cell_spec(sec.get("cell_spec")),
+        uhrzeit_spalten=_parse_excel_spalten_indizes(
+            sec.get("uhrzeit_spalten"),
+            DEFAULT_ZEITEINTRAG_EXCEL_UHRZEIT_SPALTEN,
+            "uhrzeit_spalten",
+        ),
+        datum_spalten=_parse_excel_spalten_indizes(
+            sec.get("datum_spalten"),
+            DEFAULT_ZEITEINTRAG_EXCEL_DATUM_SPALTEN,
+            "datum_spalten",
+        ),
+        integer_spalten=_parse_excel_spalten_indizes(
+            sec.get("integer_spalten"),
+            DEFAULT_ZEITEINTRAG_EXCEL_INTEGER_SPALTEN,
+            "integer_spalten",
+        ),
+        float_spalten=_parse_excel_spalten_indizes(
+            sec.get("float_spalten"),
+            DEFAULT_ZEITEINTRAG_EXCEL_FLOAT_SPALTEN,
+            "float_spalten",
+        ),
+        text_spalten=_parse_excel_spalten_indizes(
+            sec.get("text_spalten"),
+            DEFAULT_ZEITEINTRAG_EXCEL_TEXT_SPALTEN,
+            "text_spalten",
+        ),
+        html_formatierung=bool(sec.get("html_formatierung", True)),
+    )
+
+
+def load_zeiteintrag_excel_export_settings(
+    config_path: Path | None = None,
+) -> ZeiteintragExcelExportSettings:
+    """Liest [zeiteintrag_excel_export] neu aus config.toml (z. B. vor jedem Export)."""
+    if config_path is None:
+        config_path = Path(__file__).resolve().parents[1] / "config.toml"
+    if not config_path.is_file():
+        return ZeiteintragExcelExportSettings()
+    with config_path.open("rb") as f:
+        data = tomllib.load(f)
+    if not isinstance(data, dict):
+        return ZeiteintragExcelExportSettings()
+    return _section_zeiteintrag_excel_export(data)
+
+
+def _parse_excel_spalten_indizes(
+    raw: Any, default: tuple[int, ...], feldname: str
+) -> tuple[int, ...]:
+    if raw is None:
+        return default
+    return _parse_ausgeblendete_spalten(
+        raw,
+        ZEITEINTRAG_SPALTEN_MAX,
+        f"zeiteintrag_excel_export.{feldname}",
     )
 
 

@@ -46,7 +46,7 @@ class UrlaubsantragViewModel(QObject):
             for eintrag in eintraege
         ]
         self._table_model.set_rows(rows)
-        self.status_changed.emit(f"{len(rows)} Urlaubsantrag/-aetraege geladen.")
+        self.status_changed.emit(f"{len(rows)} Urlaubsantrag/-anträge geladen.")
 
     def speichere_antrag(
         self,
@@ -89,11 +89,11 @@ class UrlaubsantragViewModel(QObject):
 
     def loesche_nach_id(self, antrag_id: int | None) -> bool:
         if antrag_id is None:
-            self.error_occurred.emit("Ungueltige Auswahl (keine Id).")
+            self.error_occurred.emit("Ungültige Auswahl (keine Id).")
             return False
         geloescht = self._anwendung.loesche(antrag_id)
         if geloescht:
-            self.status_changed.emit("Urlaubsantrag geloescht.")
+            self.status_changed.emit("Urlaubsantrag gelöscht.")
         else:
             self.status_changed.emit("Eintrag nicht gefunden.")
         return geloescht

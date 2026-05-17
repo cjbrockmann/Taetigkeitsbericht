@@ -38,7 +38,7 @@ class BetriebsferienViewModel(QObject):
             for eintrag in eintraege
         ]
         self._table_model.set_rows(rows)
-        self.status_changed.emit(f"{len(rows)} Eintraege geladen.")
+        self.status_changed.emit(f"{len(rows)} Einträge geladen.")
 
     def speichere_eintrag(
         self,
@@ -73,11 +73,11 @@ class BetriebsferienViewModel(QObject):
 
     def loesche_nach_id(self, eintrag_id: int | None) -> bool:
         if eintrag_id is None:
-            self.error_occurred.emit("Ungueltige Auswahl (keine Id).")
+            self.error_occurred.emit("Ungültige Auswahl (keine Id).")
             return False
         geloescht = self._anwendung.loesche(eintrag_id)
         if geloescht:
-            self.status_changed.emit("Betriebsferien geloescht.")
+            self.status_changed.emit("Betriebsferien gelöscht.")
         else:
             self.status_changed.emit("Eintrag nicht gefunden.")
         return geloescht

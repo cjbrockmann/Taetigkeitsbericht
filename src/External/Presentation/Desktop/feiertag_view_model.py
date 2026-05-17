@@ -107,7 +107,7 @@ class FeiertagViewModel(QObject):
         datum = datetime.strptime(text_datum, "%d.%m.%Y").date()
         geloescht = self._anwendung.loesche_fuer_datum(datum)
         if geloescht:
-            self.status_changed.emit("Eintrag geloescht.")
+            self.status_changed.emit("Eintrag gelöscht.")
         else:
             self.status_changed.emit("Kein Eintrag zum Datum gefunden.")
         return geloescht

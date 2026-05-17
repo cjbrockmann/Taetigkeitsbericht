@@ -27,7 +27,7 @@ class SchulferienViewModel(QObject):
 
     def lade_fuer_jahr(self, jahr: int) -> None:
         n = self._refresh_tabelle(jahr)
-        self.status_changed.emit(f"{n} Eintraege geladen.")
+        self.status_changed.emit(f"{n} Einträge geladen.")
 
     def _refresh_tabelle(self, jahr: int) -> int:
         eintraege = self._anwendung.liste(jahr=jahr)
@@ -77,11 +77,11 @@ class SchulferienViewModel(QObject):
 
     def loesche_nach_id(self, eintrag_id: int | None) -> bool:
         if eintrag_id is None:
-            self.error_occurred.emit("Ungueltige Auswahl (keine Id).")
+            self.error_occurred.emit("Ungültige Auswahl (keine Id).")
             return False
         geloescht = self._anwendung.loesche(eintrag_id)
         if geloescht:
-            self.status_changed.emit("Schulferien geloescht.")
+            self.status_changed.emit("Schulferien gelöscht.")
         else:
             self.status_changed.emit("Eintrag nicht gefunden.")
         return geloescht
@@ -95,7 +95,7 @@ class SchulferienViewModel(QObject):
         n = self._refresh_tabelle(jahr)
         teile = [f"{neu} neu", f"{aktualisiert} aktualisiert"]
         if uebersprungen:
-            teile.append(f"{uebersprungen} uebersprungen (Ueberschneidung)")
+            teile.append(f"{uebersprungen} übersprungen (Überschneidung)")
         self.status_changed.emit(
-            f"{', '.join(teile)} (Schulferien-API). {n} Eintraege fuer {jahr} angezeigt."
+            f"{', '.join(teile)} (Schulferien-API). {n} Einträge für {jahr} angezeigt."
         )

@@ -122,9 +122,9 @@ class KrankmeldungView(QWidget):
         self._reset_button = QPushButton("Reset", self)
         self._reset_button.setStyleSheet("QPushButton { color: blue; }")
         self._reset_button.setToolTip(
-            "Markierung aufheben, Formular zuruecksetzen, Krank von/bis auf heute."
+            "Markierung aufheben, Formular zurücksetzen, Krank von/bis auf heute."
         )
-        self._loeschen_button = QPushButton("Markierte Zeile loeschen", self)
+        self._loeschen_button = QPushButton("Markierte Zeile löschen", self)
         self._loeschen_button.setStyleSheet("QPushButton { color: red; }")
 
         _btn_breite = 220

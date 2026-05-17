@@ -40,7 +40,7 @@ class ZeiteintragSpalte:
     ZEIT_SPALTE_BREITE = 50
     STATUS_ICON_RAND = 5
     STATUS_ICON_MAX_GROESSE = 16
-    KOMMENTAR_MIN_BREITE = 420
+    KOMMENTAR_MIN_BREITE = 200
     NAME_SPALTE_BREITE = 120
 
 
@@ -193,7 +193,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Gesamt-Soll aus Stundenplan (Wochentag), nur erste Zeile je Tag, Format HH:MM",
         "Soll nach Vertrag, Format HH:MM",
         "Freitext (max. 80 Zeichen)",
-        "Kalendertag als Text fuer Excel (z. B. 7.)",
+        "Kalendertag als Text für Excel (z. B. 7.)",
         "Name des Feiertags",
         "Name der Schulferien",
     ]

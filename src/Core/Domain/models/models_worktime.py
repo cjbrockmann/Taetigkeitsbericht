@@ -64,7 +64,7 @@ class ArbeitszeitBasis(BaseModel):
             if self.uhrzeit_von == self.uhrzeit_bis and self._hat_gesetzte_pause():
                 raise ValueError(
                     "Bei gleicher Arbeitszeit (uhrzeit_von = uhrzeit_bis) "
-                    "duerfen keine Pausen gesetzt sein."
+                    "dürfen keine Pausen gesetzt sein."
                 )
 
             for feldname, zeit in (
@@ -78,14 +78,14 @@ class ArbeitszeitBasis(BaseModel):
                 )
 
         if (self.pause_beginn is None) ^ (self.pause_ende is None):
-            raise ValueError("pause_beginn und pause_ende muessen gemeinsam gesetzt sein.")
+            raise ValueError("pause_beginn und pause_ende müssen gemeinsam gesetzt sein.")
 
         if self.pause_beginn and self.pause_ende:
             if self.pause_beginn >= self.pause_ende:
                 raise ValueError("pause_beginn muss vor pause_ende liegen.")
 
         if (self.pause2_beginn is None) ^ (self.pause2_ende is None):
-            raise ValueError("pause2_beginn und pause2_ende muessen gemeinsam gesetzt sein.")
+            raise ValueError("pause2_beginn und pause2_ende müssen gemeinsam gesetzt sein.")
 
         if self.pause2_beginn and self.pause2_ende:
             if self.pause2_beginn >= self.pause2_ende:
@@ -103,7 +103,7 @@ class ArbeitszeitBasis(BaseModel):
                 self.pause2_ende,
             )
         ):
-            raise ValueError("Pause 1 und Pause 2 duerfen sich nicht ueberlappen.")
+            raise ValueError("Pause 1 und Pause 2 dürfen sich nicht überlappen.")
 
         return self
 
@@ -128,7 +128,18 @@ class ZeiteintragsDTO(Zeiteintrag):
     feiertagsname: Optional[str] = Field(default=None, max_length=80, description="Name des Feiertags")
     schulferienname: Optional[str] = Field(default=None, max_length=80, description="Name der Schulferien")
 
-
+    @model_validator(mode="after")
+    def pruefe_zeitraeume(self) -> "ZeiteintragsDTO":
+        """Weniger streng als Zeiteintrag: unvollstaendige und Ueberstunden-frei-Zeilen."""
+        if self.uhrzeit_von is None or self.uhrzeit_bis is None:
+            return self
+        if self.uhrzeit_von == self.uhrzeit_bis:
+            return self
+        if (self.pause_beginn is None) ^ (self.pause_ende is None):
+            return self
+        if (self.pause2_beginn is None) ^ (self.pause2_ende is None):
+            return self
+        return ArbeitszeitBasis.pruefe_zeitraeume(self)
 
 
 # Klasse für den Stundenplan, der eine Vorlage für die Soll-Arbeitszeiten an jedem Wochentag darstellt

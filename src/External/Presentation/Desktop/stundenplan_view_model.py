@@ -46,7 +46,7 @@ class StundenplanViewModel(QObject):
         self._zu_loeschende_ids.clear()
         self._stundenplan_registry.aktualisiere_aus_zeilen(rows, benachrichtigen=True)
         self.status_changed.emit(
-            f"{len(rows)} Stundenplan-Eintrag/-eintraege geladen."
+            f"{len(rows)} Stundenplan-Eintrag/-einträge geladen."
         )
 
     def synchronisiere_registry_mit_tabelle(self) -> None:
@@ -115,7 +115,7 @@ class StundenplanViewModel(QObject):
 
         if not zeilen_zum_speichern and not gibt_loeschungen:
             self.error_occurred.emit(
-                "Es gibt keine Aenderungen zum Speichern."
+                "Es gibt keine Änderungen zum Speichern."
             )
             return False
 
@@ -151,7 +151,7 @@ class StundenplanViewModel(QObject):
                 if self._anwendung.loesche_per_id(eintrag_id):
                     geloescht += 1
             except Exception as exc:  # noqa: BLE001
-                fehler.append(f"Loeschen {eintrag_id}: {exc}")
+                fehler.append(f"Löschen {eintrag_id}: {exc}")
                 verbleibende_loeschungen.append(eintrag_id)
         self._zu_loeschende_ids = verbleibende_loeschungen
 
@@ -167,8 +167,8 @@ class StundenplanViewModel(QObject):
         if fehler:
             self.error_occurred.emit("\n".join(fehler))
         self.status_changed.emit(
-            f"{erfolgreich} Stundenplan-Eintrag/-eintraege gespeichert, "
-            f"{geloescht} geloescht, {len(fehler)} Fehler."
+            f"{erfolgreich} Stundenplan-Eintrag/-einträge gespeichert, "
+            f"{geloescht} gelöscht, {len(fehler)} Fehler."
         )
         return not fehler
 

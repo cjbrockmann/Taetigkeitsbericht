@@ -159,11 +159,11 @@ class UrlaubsantragView(QWidget):
 
         self._reset_button = QPushButton("Reset", self)
         self._reset_button.setToolTip(
-            "Eingabe zuruecksetzen fuer einen neuen Urlaubsantrag."
+            "Eingabe zurücksetzen für einen neuen Urlaubsantrag."
         )
-        self._loeschen_button = QPushButton("Markierten Antrag loeschen", self)
+        self._loeschen_button = QPushButton("Markierten Antrag löschen", self)
         self._loeschen_button.setToolTip(
-            "Loeschen der markierten Tabellenzeile (Taste Entf)."
+            "Löschen der markierten Tabellenzeile (Taste Entf)."
         )
 
         _btn_breite_px = 200
@@ -472,18 +472,18 @@ class UrlaubsantragView(QWidget):
         row_index = selected_rows[0].row()
         table_model = self._view_model.table_model
         if row_index < 0 or row_index >= len(table_model.rows):
-            self._show_error("Ungueltige Zeilenauswahl.")
+            self._show_error("Ungültige Zeilenauswahl.")
             return
         row = table_model.rows[row_index]
         if row.id is None:
             self._show_error(
-                "Dieser Eintrag kann nicht geloescht werden (fehlende Datensatz-Id)."
+                "Dieser Eintrag kann nicht gelöscht werden (fehlende Datensatz-Id)."
             )
             return
         if not frage_ja_nein(
             self,
-            "Urlaubsantrag loeschen",
-            f"Urlaubsantrag vom {row.datum_von} bis {row.datum_bis} endgueltig loeschen?",
+            "Urlaubsantrag löschen",
+            f"Urlaubsantrag vom {row.datum_von} bis {row.datum_bis} endgültig löschen?",
         ):
             return
         try:

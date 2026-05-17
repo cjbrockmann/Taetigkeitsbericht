@@ -197,8 +197,8 @@ class StundenplanView(QWidget):
         root_layout = QVBoxLayout(self)
         toolbar_layout = QHBoxLayout()
 
-        self._zeile_hinzufuegen_button = QPushButton("Zeile hinzufuegen", self)
-        self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) loeschen", self)
+        self._zeile_hinzufuegen_button = QPushButton("Zeile hinzufügen", self)
+        self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) löschen", self)
         self._speichern_button = QPushButton("Alle Zeilen speichern", self)
         self._status_label = QLabel("Bereit.", self)
         self._summen_label = QLabel("", self)

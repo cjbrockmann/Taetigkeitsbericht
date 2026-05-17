@@ -452,14 +452,17 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             if self._eintrag_hat_geleistete_arbeitszeit(e)
         )
 
-    def _berechne_geleistete_stunden_zeile_1_urlaub(
+    def _berechne_geleistete_stunden_zeile_1_vertrag_plus_arbeit(
         self,
         eintraege: list[ZeiteintragsDTO],
         *,
         hat_arbeit: bool,
         vertrag_soll: time | None,
     ) -> time | None:
-        """Urlaub Zeile 1: Vertrags-Soll, bei Arbeit zusaetzlich alle Arbeitszeiten des Tages."""
+        """
+        Urlaub/Krank Zeile 1 (Geleistet-Spalte): Soll nach Vertrag;
+        bei zusaetzlicher Arbeitszeit Vertrag + Summe aller Arbeitszeiten des Tages.
+        """
         if not hat_arbeit:
             return vertrag_soll
         vertrag_sek = (
@@ -469,20 +472,6 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         if gesamt_sek <= 0:
             return None
         return self._sekunden_als_uhrzeit_fuer_dauer(gesamt_sek)
-
-    def _berechne_geleistete_stunden_zeile_1_krank(
-        self,
-        eintrag: ZeiteintragsDTO,
-        *,
-        hat_arbeit_am_tag: bool,
-        vertrag_soll: time | None,
-    ) -> time | None:
-        """Krank Zeile 1: nur eigene Arbeitszeit, sonst Vertrags-Soll."""
-        if hat_arbeit_am_tag and self._eintrag_hat_geleistete_arbeitszeit(eintrag):
-            return self._berechne_geleistete_stunden_aus_zeiten(eintrag)
-        if not hat_arbeit_am_tag:
-            return vertrag_soll
-        return vertrag_soll
 
     def _aktualisiere_geleistete_stunden_fuer_tag(
         self, eintraege: list[ZeiteintragsDTO]
@@ -496,18 +485,13 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         if ist_urlaub or ist_krank:
             vertrag_soll = self._berechne_soll_stunden_nach_vertrag(eintraege[0].datum)
         for zeile_nr, eintrag in enumerate(eintraege, start=1):
-            # Krank vor Urlaub: bei beiden gilt die Krankheitslogik (Urlaub wird gutgeschrieben).
-            if ist_krank and zeile_nr == 1:
-                eintrag.geleistete_stunden = self._berechne_geleistete_stunden_zeile_1_krank(
-                    eintrag,
-                    hat_arbeit_am_tag=hat_arbeit,
-                    vertrag_soll=vertrag_soll,
-                )
-            elif ist_urlaub and zeile_nr == 1:
-                eintrag.geleistete_stunden = self._berechne_geleistete_stunden_zeile_1_urlaub(
-                    eintraege,
-                    hat_arbeit=hat_arbeit,
-                    vertrag_soll=vertrag_soll,
+            if (ist_krank or ist_urlaub) and zeile_nr == 1:
+                eintrag.geleistete_stunden = (
+                    self._berechne_geleistete_stunden_zeile_1_vertrag_plus_arbeit(
+                        eintraege,
+                        hat_arbeit=hat_arbeit,
+                        vertrag_soll=vertrag_soll,
+                    )
                 )
             else:
                 eintrag.geleistete_stunden = self._berechne_geleistete_stunden_aus_zeiten(
