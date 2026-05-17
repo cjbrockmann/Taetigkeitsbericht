@@ -8,12 +8,12 @@ from PySide6.QtGui import QKeySequence, QShortcut, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDateEdit,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QDoubleSpinBox,
     QPushButton,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from App.app_config import AppConfig
 from External.Presentation.Desktop.form_bearbeitung_dirty import dirty_indices_bei_form_bearbeitung
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
@@ -34,9 +35,19 @@ from External.Presentation.Desktop.urlaubsantrag_view_model import Urlaubsantrag
 
 
 class UrlaubsantragView(QWidget):
-    def __init__(self, view_model: UrlaubsantragViewModel, parent: QWidget | None = None) -> None:
+    _STANDARD_URLAUBSTYP = "Jahresurlaub"
+
+    def __init__(
+        self,
+        view_model: UrlaubsantragViewModel,
+        app_config: AppConfig,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._view_model = view_model
+        self._kommentar_ueberstunden_frei = (
+            app_config.kommentar_ueberstunden_frei.strip() or "Ü-Frei"
+        )
         self._initial_load_done = False
         self._bearbeitungs_id: int | None = None
         self._suspend_selection_sync = False
@@ -103,12 +114,16 @@ class UrlaubsantragView(QWidget):
         datum_layout.addWidget(self._datum_bis_input)
         datum_layout.addStretch()
 
-        self._urlaubstyp_input = QLineEdit(self._form_group)
-        self._urlaubstyp_input.setText("Jahresurlaub")
-        self._urlaubstyp_input.setPlaceholderText("z. B. Erholungsurlaub")
+        self._urlaubstyp_input = QComboBox(self._form_group)
+        self._urlaubstyp_input.setEditable(True)
         self._urlaubstyp_input.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
+        self._urlaubstyp_input.addItem(self._STANDARD_URLAUBSTYP)
+        if self._kommentar_ueberstunden_frei != self._STANDARD_URLAUBSTYP:
+            self._urlaubstyp_input.addItem(self._kommentar_ueberstunden_frei)
+        self._urlaubstyp_input.setCurrentText(self._STANDARD_URLAUBSTYP)
+        self._urlaubstyp_input.lineEdit().setPlaceholderText("z. B. Erholungsurlaub")
         self._urlaubstage_spin = QDoubleSpinBox(self._form_group)
         self._urlaubstage_spin.setRange(0.0, 366.0)
         self._urlaubstage_spin.setDecimals(1)
@@ -236,7 +251,7 @@ class UrlaubsantragView(QWidget):
     def _bind_form_dirty_updates(self) -> None:
         self._datum_von_input.dateChanged.connect(self._on_form_changed)
         self._datum_bis_input.dateChanged.connect(self._on_form_changed)
-        self._urlaubstyp_input.textChanged.connect(self._on_form_changed)
+        self._urlaubstyp_input.currentTextChanged.connect(self._on_form_changed)
         self._urlaubstage_spin.valueChanged.connect(self._on_form_changed)
         self._genehmigt_check.toggled.connect(self._on_form_changed)
 
@@ -252,7 +267,7 @@ class UrlaubsantragView(QWidget):
         return (
             row.datum_von == self._datum_von_input.date().toString("dd.MM.yyyy")
             and row.datum_bis == self._datum_bis_input.date().toString("dd.MM.yyyy")
-            and row.urlaubstyp.strip() == self._urlaubstyp_input.text().strip()
+            and row.urlaubstyp.strip() == self._urlaubstyp_input.currentText().strip()
             and row.genehmigt.strip().lower() == genehmigt
             and stage_zeile == self._urlaubstage_spin.value()
         )
@@ -343,7 +358,7 @@ class UrlaubsantragView(QWidget):
         for de in (self._datum_von_input, self._datum_bis_input):
             de.blockSignals(False)
         self._urlaubstage_aus_datum_vorbelegen()
-        self._urlaubstyp_input.setText("Jahresurlaub")
+        self._urlaubstyp_input.setCurrentText(self._STANDARD_URLAUBSTYP)
         self._genehmigt_check.setChecked(False)
 
     def _zeile_ins_formular(self, row: UrlaubsantragRow) -> None:
@@ -355,7 +370,7 @@ class UrlaubsantragView(QWidget):
         self._datum_bis_input.setDate(QDate(db.year, db.month, db.day))
         for de in (self._datum_von_input, self._datum_bis_input):
             de.blockSignals(False)
-        self._urlaubstyp_input.setText(row.urlaubstyp)
+        self._urlaubstyp_input.setCurrentText(row.urlaubstyp)
         stage_txt = row.urlaubstage.strip().replace(",", ".")
         self._urlaubstage_spin.setValue(float(stage_txt))
         self._genehmigt_check.setChecked(row.genehmigt.strip().lower() == "ja")
@@ -409,7 +424,7 @@ class UrlaubsantragView(QWidget):
             self._view_model.speichere_antrag(
                 datum_von_text=self._datum_von_input.date().toString("dd.MM.yyyy"),
                 datum_bis_text=self._datum_bis_input.date().toString("dd.MM.yyyy"),
-                urlaubstyp=self._urlaubstyp_input.text(),
+                urlaubstyp=self._urlaubstyp_input.currentText(),
                 urlaubstage_text=str(self._urlaubstage_spin.value()),
                 genehmigt=self._genehmigt_check.isChecked(),
                 antrag_id=self._bearbeitungs_id,

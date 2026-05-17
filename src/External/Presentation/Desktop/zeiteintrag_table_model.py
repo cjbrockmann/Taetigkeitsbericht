@@ -11,7 +11,6 @@ from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPen, QPixmap, QPolyg
 from Core.Domain.models.models_worktime import Feiertag
 from External.Presentation.Desktop.arbeitszeit_berechnung import (
     minuten_als_hh_mm,
-    netto_arbeitsminuten,
     parse_uhrzeit_minuten,
 )
 from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
@@ -219,14 +218,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
             case 7:
                 return row.pause2_ende
             case 8:
-                return self._calculate_geleistete_zeit(
-                    row.uhrzeit_von,
-                    row.uhrzeit_bis,
-                    row.pause_beginn,
-                    row.pause_ende,
-                    row.pause2_beginn,
-                    row.pause2_ende,
-                )
+                return row.geleistete_stunden
             case 9:
                 return row.soll_stunden_nach_stundenplan
             case 10:
@@ -264,7 +256,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
             return False
         elif index.column() == 1:
             row.datum = text
-            self._trage_feiertagsname_in_leeres_kommentar_ein(row)
         elif index.column() == 2:
             row.uhrzeit_von = text
         elif index.column() == 3:
@@ -331,14 +322,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         self.beginInsertRows(QModelIndex(), position, position)
         self._rows.insert(position, ZeiteintragRow(datum=datum))
         self.endInsertRows()
-        zeile = self._rows[position]
-        if self._trage_feiertagsname_in_leeres_kommentar_ein(zeile):
-            idx = self.index(position, 11)
-            self.dataChanged.emit(
-                idx,
-                idx,
-                [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole],
-            )
         return position
 
     def remove_rows(self, row_indices: list[int]) -> None:
@@ -351,18 +334,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
 
     def set_feiertag_nach_datum(self, mapping: dict[date, Feiertag]) -> None:
         self._feiertag_nach_datum = dict(mapping)
-
-    def ergaenze_feiertagsname_in_leerem_kommentar(self) -> None:
-        """Schreibt den Feiertagsnamen in die Kommentarspalte, wenn diese leer ist."""
-        for zeilen_index, row in enumerate(self._rows):
-            if not self._trage_feiertagsname_in_leeres_kommentar_ein(row):
-                continue
-            idx = self.index(zeilen_index, 11)
-            self.dataChanged.emit(
-                idx,
-                idx,
-                [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole],
-            )
 
     def set_stundenplan_registry(self, registry: StundenplanRegistry | None) -> None:
         self._stundenplan_registry = registry
@@ -406,14 +377,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         geleistet = 0
         soll = 0
         for row in self._rows:
-            gz = self._calculate_geleistete_zeit(
-                row.uhrzeit_von,
-                row.uhrzeit_bis,
-                row.pause_beginn,
-                row.pause_ende,
-                row.pause2_beginn,
-                row.pause2_ende,
-            )
+            gz = row.geleistete_stunden.strip()
             if gz:
                 m = self._parse_minutes(gz)
                 if m is not None:
@@ -440,27 +404,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
     @staticmethod
     def minuten_als_hh_mm(gesamt_minuten: int) -> str:
         return minuten_als_hh_mm(gesamt_minuten)
-
-    @staticmethod
-    def _calculate_geleistete_zeit(
-        uhrzeit_von: str,
-        uhrzeit_bis: str,
-        pause_von: str,
-        pause_bis: str,
-        pause2_von: str = "",
-        pause2_bis: str = "",
-    ) -> str:
-        netto = netto_arbeitsminuten(
-            uhrzeit_von,
-            uhrzeit_bis,
-            pause_von,
-            pause_bis,
-            pause2_von,
-            pause2_bis,
-        )
-        if netto is None:
-            return ""
-        return minuten_als_hh_mm(netto)
 
     @staticmethod
     def _parse_minutes(text: str) -> int | None:
@@ -509,18 +452,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         except ValueError:
             return None
         return self._feiertag_nach_datum.get(d)
-
-    def _trage_feiertagsname_in_leeres_kommentar_ein(self, row: ZeiteintragRow) -> bool:
-        if row.anmerkung.strip():
-            return False
-        feiertag = self._feiertag_fuer_datumtext(row.datum)
-        if feiertag is None:
-            return False
-        name = feiertag.feiertagsname.strip()
-        if not name:
-            return False
-        row.anmerkung = name[: self._MAX_ANMERKUNG_LAENGE]
-        return True
 
     def ist_feiertag(self, datum_text: str) -> bool:
         return self._feiertag_fuer_datumtext(datum_text) is not None

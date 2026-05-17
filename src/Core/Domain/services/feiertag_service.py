@@ -40,10 +40,10 @@ class FeiertagService:
         api_config = config.get("feiertage_api", {})
         basis_url = str(api_config.get("url", "")).strip()
         if not basis_url:
-            raise ValueError("feiertage_api.url fehlt in src/feiertag.toml.")
+            raise ValueError("feiertage_api.url fehlt in src/external_api.toml.")
         bundesland_code = str(api_config.get("bundesland_code", "")).strip().upper()
         if not bundesland_code:
-            raise ValueError("feiertage_api.bundesland_code fehlt in src/feiertag.toml.")
+            raise ValueError("feiertage_api.bundesland_code fehlt in src/external_api.toml.")
 
         trennzeichen = "&" if "?" in basis_url else "?"
         request_url = f"{basis_url}{trennzeichen}jahr={jahr}&nur_land={bundesland_code}"

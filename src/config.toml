@@ -22,6 +22,13 @@ wochenstunden = [
 wochenstunden_regel = 40
 wochenstunden_max = 48
 wochenstunden_summe = 16
+sollstunden_an_feiertagen = false 
+kommentar_urlaubstage = "U"
+kommentar_krankheitstage = "K"
+kommentar_ueberstunden_frei = "Ü-Frei" 
+prefix_kommentar_feiertage = "F:"
+prefix_kommentar_betriebsferientage = "B:" 
+
 
 
 # Stundenplan: Spalten 0–8 nur ausblenden (0 Wochentag, 1–2 Arbeitsphase, 3–4 Pause, 5–6 Pause 2, 7 Soll, 8 Kommentar).

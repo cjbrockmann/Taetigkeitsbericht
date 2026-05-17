@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from typing import Optional
 from uuid import UUID
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
@@ -40,12 +40,14 @@ class ZeiteintragViewModel(QObject):
         self._stundenplan_view_model = stundenplan_view_model
         self._table_model = ZeiteintragTableModel()
         self._table_model.set_stundenplan_registry(stundenplan_registry)
+        self._suspend_anreicherung = False
         self._zu_loeschende_ids: list[UUID] = []
         self._geladenes_jahr: int | None = None
         self._geladenes_monat: int | None = None
         self._feiertag_registry.feiertage_geaendert.connect(self._auf_feiertage_geaendert)
         self._stundenplan_registry.stundenplan_geaendert.connect(self._auf_stundenplan_geaendert)
-        
+        self._table_model.dataChanged.connect(self._on_table_data_changed)
+
 
     @property
     def table_model(self) -> ZeiteintragTableModel:
@@ -56,7 +58,13 @@ class ZeiteintragViewModel(QObject):
         return list(self._zu_loeschende_ids)
 
     def add_row(self, position: int | None = None, datum: str = "") -> int:
-        return self._table_model.add_empty_row(position=position, datum=datum)
+        pos = self._table_model.add_empty_row(position=position, datum=datum)
+        if datum.strip():
+            try:
+                self._anreichere_tage({self._parse_date(datum)})
+            except ValueError:
+                pass
+        return pos
 
     def remove_rows(self, row_indices: list[int]) -> None:
         gueltige_indizes = sorted(
@@ -97,7 +105,6 @@ class ZeiteintragViewModel(QObject):
         self._table_model.set_feiertag_nach_datum(
             self._feiertag_registry.snapshot_fuer_monat(jahr, monat)
         )
-        self._table_model.ergaenze_feiertagsname_in_leerem_kommentar()
         self._geladenes_jahr = jahr
         self._geladenes_monat = monat
         self._zu_loeschende_ids.clear()
@@ -116,8 +123,92 @@ class ZeiteintragViewModel(QObject):
                 self._geladenes_monat,
             )
         )
-        self._table_model.ergaenze_feiertagsname_in_leerem_kommentar()
+        self._anreichere_alle_zeilen_in_tabelle()
         self._table_model.feiertag_darstellung_aktualisieren()
+
+    def _on_table_data_changed(self, top_left, bottom_right, roles) -> None:
+        if self._suspend_anreicherung:
+            return
+        if not roles or Qt.ItemDataRole.EditRole not in roles:
+            return
+        if top_left.column() > 7 or bottom_right.column() < 1:
+            return
+        daten: set[date] = set()
+        for row_index in range(top_left.row(), bottom_right.row() + 1):
+            if row_index < 0 or row_index >= len(self._table_model.rows):
+                continue
+            text = self._table_model.rows[row_index].datum.strip()
+            if not text:
+                continue
+            try:
+                daten.add(self._parse_date(text))
+            except ValueError:
+                continue
+        if daten:
+            self._anreichere_tage(daten)
+
+    def _anreichere_tage(self, daten: set[date]) -> None:
+        if not isinstance(self._anwendung, ZeiteintragAnwendungDTO):
+            return
+        nach_tag: dict[date, list[tuple[ZeiteintragRow, ZeiteintragsDTO]]] = {}
+        for row in self._table_model.rows:
+            text = row.datum.strip()
+            if not text:
+                continue
+            try:
+                tag = self._parse_date(text)
+            except ValueError:
+                continue
+            if tag not in daten:
+                continue
+            dto = self._row_to_dto(row)
+            nach_tag.setdefault(tag, []).append((row, dto))
+        if not nach_tag:
+            return
+        self._suspend_anreicherung = True
+        try:
+            for gruppe in nach_tag.values():
+                dtos = [dto for _, dto in gruppe]
+                self._anwendung.anreichere_eintraege_fuer_tag(dtos)
+                for (row, dto) in gruppe:
+                    self._apply_dto_to_row(row, dto)
+            self._benachrichtige_tabellen_update()
+            self._table_model.feiertag_darstellung_aktualisieren()
+        finally:
+            self._suspend_anreicherung = False
+
+    def _benachrichtige_tabellen_update(self) -> None:
+        model = self._table_model
+        if not model.rows:
+            return
+        top = model.index(0, 0)
+        bottom = model.index(len(model.rows) - 1, len(model.HEADERS) - 1)
+        model.dataChanged.emit(
+            top,
+            bottom,
+            [
+                Qt.ItemDataRole.DisplayRole,
+                Qt.ItemDataRole.EditRole,
+                Qt.ItemDataRole.BackgroundRole,
+                Qt.ItemDataRole.ToolTipRole,
+                Qt.ItemDataRole.DecorationRole,
+            ],
+        )
+
+    def _anreichere_alle_zeilen_in_tabelle(self) -> None:
+        if not isinstance(self._anwendung, ZeiteintragAnwendungDTO):
+            return
+        daten: set[date] = set()
+        for row in self._table_model.rows:
+            text = row.datum.strip()
+            if not text:
+                continue
+            try:
+                daten.add(self._parse_date(text))
+            except ValueError:
+                continue
+        if daten:
+            self._anreichere_tage(daten)
 
     def _stundenplan_eintraege_fuer_soll(self) -> list[Stundenplan]:
         """Stundenplan fuer Soll-Berechnung aus der gemeinsamen In-Memory-Liste (kein DB-Zugriff)."""
@@ -206,6 +297,65 @@ class ZeiteintragViewModel(QObject):
         if ergebnis is None:
             raise ValueError("Pause: erwartet HH:MM, z. B. 12:00.")
         return ergebnis
+
+    @staticmethod
+    def _row_to_dto(row: ZeiteintragRow) -> ZeiteintragsDTO:
+        return ZeiteintragsDTO(
+            id=row.id,
+            datum=ZeiteintragViewModel._parse_date(row.datum),
+            uhrzeit_von=ZeiteintragViewModel._parse_optional_time(row.uhrzeit_von),
+            uhrzeit_bis=ZeiteintragViewModel._parse_optional_time(row.uhrzeit_bis),
+            pause_beginn=ZeiteintragViewModel._parse_optional_time(row.pause_beginn),
+            pause_ende=ZeiteintragViewModel._parse_optional_time(row.pause_ende),
+            pause2_beginn=ZeiteintragViewModel._parse_optional_time(row.pause2_beginn),
+            pause2_ende=ZeiteintragViewModel._parse_optional_time(row.pause2_ende),
+            anmerkung=row.anmerkung or None,
+        )
+
+    @staticmethod
+    def _apply_dto_to_row(row: ZeiteintragRow, eintrag: ZeiteintragsDTO) -> None:
+        row.datum = eintrag.datum.strftime("%d.%m.%Y")
+        row.uhrzeit_von = (
+            eintrag.uhrzeit_von.strftime("%H:%M") if eintrag.uhrzeit_von else ""
+        )
+        row.uhrzeit_bis = (
+            eintrag.uhrzeit_bis.strftime("%H:%M") if eintrag.uhrzeit_bis else ""
+        )
+        row.pause_beginn = (
+            eintrag.pause_beginn.strftime("%H:%M") if eintrag.pause_beginn else ""
+        )
+        row.pause_ende = (
+            eintrag.pause_ende.strftime("%H:%M") if eintrag.pause_ende else ""
+        )
+        row.pause2_beginn = (
+            eintrag.pause2_beginn.strftime("%H:%M") if eintrag.pause2_beginn else ""
+        )
+        row.pause2_ende = (
+            eintrag.pause2_ende.strftime("%H:%M") if eintrag.pause2_ende else ""
+        )
+        row.anmerkung = eintrag.anmerkung or ""
+        row.geleistete_stunden = (
+            eintrag.geleistete_stunden.strftime("%H:%M")
+            if eintrag.geleistete_stunden
+            else ""
+        )
+        row.soll_stunden_nach_stundenplan = (
+            eintrag.soll_stunden_nach_Stundenplan.strftime("%H:%M")
+            if eintrag.soll_stunden_nach_Stundenplan
+            else ""
+        )
+        row.soll_stunden_nach_vertrag = (
+            eintrag.soll_stunden_nach_vertrag.strftime("%H:%M")
+            if eintrag.soll_stunden_nach_vertrag
+            else ""
+        )
+        row.ist_urlaub = eintrag.ist_urlaub
+        row.ist_krank = eintrag.ist_krank
+        row.ist_feiertag = eintrag.ist_feiertag
+        row.ist_ferien = eintrag.ist_ferien
+        row.ist_betriebsferien = eintrag.ist_betriebsferien
+        row.feiertagsname = eintrag.feiertagsname or ""
+        row.schulferienname = eintrag.schulferienname or ""
 
     @staticmethod
     def _map_to_row(eintrag: ZeiteintragsDTO) -> ZeiteintragRow:

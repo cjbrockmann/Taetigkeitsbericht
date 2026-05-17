@@ -97,6 +97,8 @@ class ApplicationDIModule(Module):
         anwendung.set_vertrag_stunden_nach_wochentag(
             app_config.soll_nach_vertrag_nach_wochentag
         )
+        anwendung.set_sollstunden_an_feiertagen(app_config.sollstunden_an_feiertagen)
+        anwendung.set_kommentar_urlaubstage(app_config.kommentar_urlaubstage)
         return anwendung
 
     @singleton

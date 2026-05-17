@@ -125,6 +125,9 @@ class AppConfig:
     name: str = "Taetigkeitsbericht"
     version: str = "0.0.0"
     soll_nach_vertrag_nach_wochentag: dict[int, str] = field(default_factory=dict)
+    sollstunden_an_feiertagen: bool = False
+    kommentar_urlaubstage: str = ""
+    kommentar_ueberstunden_frei: str = ""
     zeiteintrag_ausgeblendete_spalten: tuple[int, ...] = ()
     stundenplan_ausgeblendete_spalten: tuple[int, ...] = ()
     zeiteintrag_excel_export: ZeiteintragExcelExportSettings = field(
@@ -172,9 +175,28 @@ def _section_stundenplan_tabelle(data: dict[str, Any]) -> tuple[int, ...]:
     )
 
 
-def _section_soll_nach_vertrag(data: dict[str, Any]) -> dict[int, str]:
+def _sollstunden_section(data: dict[str, Any]) -> dict[str, Any]:
     sec = data.get("sollstunden")
-    if not isinstance(sec, dict):
+    return sec if isinstance(sec, dict) else {}
+
+
+def _section_sollstunden_an_feiertagen(data: dict[str, Any]) -> bool:
+    return bool(_sollstunden_section(data).get("sollstunden_an_feiertagen", False))
+
+
+def _section_kommentar_urlaubstage(data: dict[str, Any]) -> str:
+    wert = _sollstunden_section(data).get("kommentar_urlaubstage", "")
+    return str(wert).strip() if wert is not None else ""
+
+
+def _section_kommentar_ueberstunden_frei(data: dict[str, Any]) -> str:
+    wert = _sollstunden_section(data).get("kommentar_ueberstunden_frei", "")
+    return str(wert).strip() if wert is not None else ""
+
+
+def _section_soll_nach_vertrag(data: dict[str, Any]) -> dict[int, str]:
+    sec = _sollstunden_section(data)
+    if not sec:
         return {}
     wochenstunden = sec.get("wochenstunden")
     if not isinstance(wochenstunden, list):
@@ -206,6 +228,9 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         name=str(data.get("name", "Taetigkeitsbericht")),
         version=str(data.get("version", "0.0.0")),
         soll_nach_vertrag_nach_wochentag=_section_soll_nach_vertrag(data),
+        sollstunden_an_feiertagen=_section_sollstunden_an_feiertagen(data),
+        kommentar_urlaubstage=_section_kommentar_urlaubstage(data),
+        kommentar_ueberstunden_frei=_section_kommentar_ueberstunden_frei(data),
         zeiteintrag_ausgeblendete_spalten=_section_zeiteintrag_tabelle(data),
         stundenplan_ausgeblendete_spalten=_section_stundenplan_tabelle(data),
         zeiteintrag_excel_export=_section_zeiteintrag_excel_export(data),

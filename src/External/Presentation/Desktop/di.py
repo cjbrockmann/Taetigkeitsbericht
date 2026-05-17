@@ -118,9 +118,11 @@ class DesktopPresentationDIModule(Module):
 
     @provider
     def provide_urlaubsantrag_view(
-        self, view_model: UrlaubsantragViewModel
+        self,
+        view_model: UrlaubsantragViewModel,
+        app_config: AppConfig,
     ) -> UrlaubsantragView:
-        return UrlaubsantragView(view_model)
+        return UrlaubsantragView(view_model, app_config)
 
     @provider
     def provide_krankmeldung_view(

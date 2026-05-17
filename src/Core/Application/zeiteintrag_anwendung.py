@@ -68,7 +68,8 @@ class ZeiteintragAnwendung:
 
 
 class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
-    
+    _MAX_ANMERKUNG_LAENGE = 80
+
     def __init__(self, serviceZeiteintrag: ZeiteintragService, 
                serviceStundenplan: StundenplanService, 
                serviceFeiertage: FeiertagService, 
@@ -92,6 +93,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self.betriebsferien: list[Betriebsferien] = []
         self._geladenes_jahr: Optional[int] = None
         self._vertrag_stunden_nach_wochentag: dict[int, str] = {}
+        self._sollstunden_an_feiertagen: bool = False
+        self._kommentar_urlaubstage: str = ""
 
     # ----------------------------------------------------------------------  
     #   Overwrite der Basisfunktionen
@@ -157,10 +160,21 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             eintraege_nach_tag.setdefault(eintrag.datum, []).append(eintrag)
 
         for eintraege_fuer_tag in eintraege_nach_tag.values():
-            for zeile_nr, eintrag in enumerate(eintraege_fuer_tag, start=1):
-                self._setze_soll_felder(eintrag, zeile_nr)
+            self.anreichere_eintraege_fuer_tag(eintraege_fuer_tag)
 
         return alle_eintraege
+
+    def anreichere_eintraege_fuer_tag(self, eintraege: list[ZeiteintragsDTO]) -> None:
+        """Flags, Kommentarregeln und Soll-Felder fuer alle Zeilen eines Kalendertags."""
+        if not eintraege:
+            return
+        jahr = eintraege[0].datum.year
+        self._initialisiere_jahresdaten(jahr)
+        for eintrag in eintraege:
+            self._initialisiere_dto(eintrag)
+            self._wende_kommentar_regeln_an(eintrag)
+        self._setze_soll_felder_fuer_tag(eintraege)
+        self._aktualisiere_geleistete_stunden_fuer_tag(eintraege)
 
     def loesche_fuer_datum(self, datum: date) -> bool:
         return super().loesche_fuer_datum(datum)
@@ -222,32 +236,101 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         m, s = divmod(sekunden % 3600, 60)
         return time(hour=h, minute=m, second=s)
 
-    def _berechne_soll_stunden_nach_stundenplan(self, datum: date) -> time | None:
-        """Summe aller Stundenplan-Bloecke fuer den Wochentag (nur aus self.stundenplan_eintraege)."""
-        wochentag = datum.isoweekday()  # 1=Montag, 7=Sonntag (ISO 8601)
-        netto_summe = sum(
-            self._netto_arbeitssekunden(e)
-            for e in self.stundenplan_eintraege
-            if e.wochentag == wochentag
+    def _stundenplan_bloecke_fuer_datum(self, datum: date) -> list[Stundenplan]:
+        """Stundenplan-Eintraege des Wochentags, sortiert nach Beginn (wie in der GUI)."""
+        wochentag = datum.isoweekday()
+        return sorted(
+            (e for e in self.stundenplan_eintraege if e.wochentag == wochentag),
+            key=lambda e: self._sekunden_seit_mitternacht(e.uhrzeit_von),
         )
-        if netto_summe <= 0:
-            return None
-        return self._sekunden_als_uhrzeit_fuer_dauer(netto_summe)
+
+    def _verteile_soll_stunden_nach_stundenplan(
+        self, eintraege: list[ZeiteintragsDTO]
+    ) -> None:
+        """Ordnet Stundenplan-Soll zeilenweise zu; Rest-Soll auf die letzte Zeile."""
+        for eintrag in eintraege:
+            eintrag.soll_stunden_nach_Stundenplan = None
+        if not eintraege or eintraege[0].ist_feiertag:
+            return
+
+        bloecke = self._stundenplan_bloecke_fuer_datum(eintraege[0].datum)
+        if not bloecke:
+            return
+
+        n = len(eintraege)
+        m = len(bloecke)
+        sekunden: list[int] = [0] * n
+
+        for i in range(min(n, m)):
+            sekunden[i] = self._netto_arbeitssekunden(bloecke[i])
+
+        if n < m:
+            sekunden[n - 1] += sum(
+                self._netto_arbeitssekunden(b) for b in bloecke[n:]
+            )
+
+        for eintrag, sek in zip(eintraege, sekunden, strict=True):
+            if sek > 0:
+                eintrag.soll_stunden_nach_Stundenplan = self._sekunden_als_uhrzeit_fuer_dauer(
+                    sek
+                )
 
     def set_vertrag_stunden_nach_wochentag(self, mapping: dict[int, str]) -> None:
         """Setzt das Mapping von Wochentag zu Vertragsarbeitszeit (z.B. {1: '08:00', ...})."""
         self._vertrag_stunden_nach_wochentag = dict(mapping)
 
+    def set_sollstunden_an_feiertagen(self, aktiv: bool) -> None:
+        """Ob Vertrags-Soll an Feiertagen angezeigt wird ([sollstunden].sollstunden_an_feiertagen)."""
+        self._sollstunden_an_feiertagen = aktiv
+
+    def set_kommentar_urlaubstage(self, text: str) -> None:
+        """Praefix/Kuerzel fuer Kommentar an Urlaubstagen ([sollstunden].kommentar_urlaubstage)."""
+        self._kommentar_urlaubstage = text.strip()
+
+    def _kuerze_anmerkung(self, text: str) -> str:
+        return text[: self._MAX_ANMERKUNG_LAENGE]
+
+    def _wende_kommentar_regeln_an(self, eintrag: ZeiteintragsDTO) -> None:
+        """Feiertagsname in leerem Kommentar; Urlaubskuerzel gemaess Config."""
+        bestehend = (eintrag.anmerkung or "").strip()
+        if eintrag.ist_feiertag and not bestehend:
+            name = (eintrag.feiertagsname or "").strip()
+            if name:
+                eintrag.anmerkung = self._kuerze_anmerkung(name)
+                bestehend = eintrag.anmerkung
+
+        if not eintrag.ist_urlaub or eintrag.ist_feiertag:
+            return
+        if not self._urlaubskommentar_erlaubt(eintrag.datum):
+            return
+        prefix = self._kommentar_urlaubstage
+        if not prefix:
+            return
+        prefix_mit_trenner = f"{prefix}: "
+        prefix_mit_punkt_legacy = f"{prefix}."
+        if not bestehend:
+            eintrag.anmerkung = self._kuerze_anmerkung(prefix)
+        elif (
+            bestehend == prefix
+            or bestehend.startswith(prefix_mit_trenner)
+            or bestehend.startswith(prefix_mit_punkt_legacy)
+        ):
+            return
+        else:
+            eintrag.anmerkung = self._kuerze_anmerkung(f"{prefix_mit_trenner}{bestehend}")
+
+    def _urlaubskommentar_erlaubt(self, datum: date) -> bool:
+        """Urlaubskuerzel im Kommentar nur Mo–Fr mit Vertrags-Soll > 0."""
+        if datum.isoweekday() >= 6:
+            return False
+        return self._berechne_soll_stunden_nach_vertrag(datum) is not None
+
     def _berechne_soll_stunden_nach_vertrag(self, datum: date) -> time | None:
-        """Berechnet die Soll-Arbeitszeit nach Vertrag für einen Tag.
-        Nur für Wochentage (Mo-Fr) und nicht für Feiertage.
-        Gibt die Soll-Zeit aus dem Vertrag-Mapping zurück, konvertiert von String zu time.
-        """
-        if datum.isoweekday() >= 6:  # Samstag oder Sonntag
+        """Soll-Arbeitszeit nach Vertrag: config.toml ([sollstunden].wochenstunden), je Wochentag."""
+        if not self._sollstunden_an_feiertagen and any(
+            f.datum == datum for f in self.feiertage
+        ):
             return None
-        if any(f.datum == datum for f in self.feiertage):  # Feiertag
-            return None
-        
         soll_str = self._vertrag_stunden_nach_wochentag.get(datum.isoweekday(), "").strip()
         if not soll_str:
             return None
@@ -301,28 +384,49 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         eintrag.feiertagsname = next((f.feiertagsname for f in self.feiertage if f.datum == eintrag.datum), None)
         eintrag.schulferienname = next((s.schulferienname for s in self.schulferien if s.datum_von <= eintrag.datum <= s.datum_bis), None)
 
-        if eintrag.uhrzeit_von is not None and eintrag.uhrzeit_bis is not None:
-            eintrag.geleistete_stunden = self._sekunden_als_uhrzeit_fuer_dauer(
-                self._netto_arbeitssekunden(eintrag)
-            )
-
         return eintrag
 
-    def _setze_soll_felder(self, eintrag: ZeiteintragsDTO, zeile_nr: int) -> None:
-        """Soll nach Vertrag und Stundenplan nur in der ersten Tabellenzeile je Tag."""
-        if zeile_nr == 1:
-            eintrag.soll_stunden_nach_vertrag = self._berechne_soll_stunden_nach_vertrag(
-                eintrag.datum
+    def _berechne_geleistete_stunden(
+        self, eintrag: ZeiteintragsDTO, *, zeile_nr: int
+    ) -> time | None:
+        """Geleistete Stunden: an Urlaubstagen (Zeile 1) = Soll Vertrag, sonst aus Von/Bis."""
+        if eintrag.ist_urlaub and zeile_nr == 1:
+            return self._berechne_soll_stunden_nach_vertrag(eintrag.datum)
+        if eintrag.uhrzeit_von is not None and eintrag.uhrzeit_bis is not None:
+            return self._sekunden_als_uhrzeit_fuer_dauer(
+                self._netto_arbeitssekunden(eintrag)
             )
-            if eintrag.ist_feiertag:
+        return None
+
+    def _aktualisiere_geleistete_stunden_fuer_tag(
+        self, eintraege: list[ZeiteintragsDTO]
+    ) -> None:
+        for zeile_nr, eintrag in enumerate(eintraege, start=1):
+            eintrag.geleistete_stunden = self._berechne_geleistete_stunden(
+                eintrag, zeile_nr=zeile_nr
+            )
+
+    def _setze_soll_felder_fuer_tag(self, eintraege: list[ZeiteintragsDTO]) -> None:
+        """Vertrag-Soll nur Zeile 1; Stundenplan-Soll pro Zeile (Index-Match, Rest auf letzte Zeile)."""
+        if not eintraege:
+            return
+        if eintraege[0].ist_urlaub:
+            vertrag_soll = self._berechne_soll_stunden_nach_vertrag(eintraege[0].datum)
+            for i, eintrag in enumerate(eintraege):
                 eintrag.soll_stunden_nach_Stundenplan = None
-            else:
-                eintrag.soll_stunden_nach_Stundenplan = self._berechne_soll_stunden_nach_stundenplan(
+                if i == 0:
+                    eintrag.soll_stunden_nach_vertrag = vertrag_soll
+                else:
+                    eintrag.soll_stunden_nach_vertrag = None
+            return
+        for i, eintrag in enumerate(eintraege):
+            if i == 0:
+                eintrag.soll_stunden_nach_vertrag = self._berechne_soll_stunden_nach_vertrag(
                     eintrag.datum
                 )
-        else:
-            eintrag.soll_stunden_nach_vertrag = None
-            eintrag.soll_stunden_nach_Stundenplan = None
+            else:
+                eintrag.soll_stunden_nach_vertrag = None
+        self._verteile_soll_stunden_nach_stundenplan(eintraege)
 
     def _basiseintrag_aus_zeiteintrag(self, eintrag: Zeiteintrag) -> ZeiteintragsDTO:
         return ZeiteintragsDTO(
@@ -349,14 +453,14 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             pause2_ende  = None,
             anmerkung    = None,            
         ))
-        self._setze_soll_felder(dto, zeile_nr=1)
+        self.anreichere_eintraege_fuer_tag([dto])
         return dto
 
     def _zeiteintrag_zu_dto(self, eintrag: Zeiteintrag) -> ZeiteintragsDTO:
         jahr = eintrag.datum.year
         self._initialisiere_jahresdaten(jahr)
         dto = self._initialisiere_dto(self._basiseintrag_aus_zeiteintrag(eintrag))
-        self._setze_soll_felder(dto, zeile_nr=1)
+        self.anreichere_eintraege_fuer_tag([dto])
         return dto
 
     def _dto_zu_zeiteintrag(self, eintrag: ZeiteintragsDTO) -> Zeiteintrag:
