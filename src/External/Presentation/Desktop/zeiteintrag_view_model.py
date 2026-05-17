@@ -72,13 +72,24 @@ class ZeiteintragViewModel(QObject):
                 index
                 for index in row_indices
                 if 0 <= index < len(self._table_model.rows)
-            }
+            },
+            reverse=True,
         )
+        daten_zum_anreichern: set[date] = set()
         for index in gueltige_indizes:
             row = self._table_model.rows[index]
+            datum = row.datum
             if isinstance(row.id, UUID) and row.id not in self._zu_loeschende_ids:
                 self._zu_loeschende_ids.append(row.id)
-        self._table_model.remove_rows(row_indices)
+            self._table_model.remove_rows([index])
+            self._table_model.add_empty_row(position=index, datum=datum)
+            if datum.strip():
+                try:
+                    daten_zum_anreichern.add(self._parse_date(datum))
+                except ValueError:
+                    pass
+        if daten_zum_anreichern:
+            self._anreichere_tage(daten_zum_anreichern)
 
     def lade_zeitraum(self, jahr: int, monat: int) -> None:
         feiertage = self._feiertag_anwendung.liste(jahr=jahr)
@@ -255,10 +266,10 @@ class ZeiteintragViewModel(QObject):
         for zeilen_nummer, row in zeilen_zum_speichern:
             try:
                 pause1_von, pause1_bis = self._parse_pausenpaar(
-                    row.pause_beginn, row.pause_ende
+                    row.pause_beginn, row.pause_ende, fuer_speichern=True
                 )
                 pause2_von, pause2_bis = self._parse_pausenpaar(
-                    row.pause2_beginn, row.pause2_ende
+                    row.pause2_beginn, row.pause2_ende, fuer_speichern=True
                 )
                 eintrag = Zeiteintrag(
                     id=row.id,
@@ -309,8 +320,21 @@ class ZeiteintragViewModel(QObject):
         return ergebnis
 
     @staticmethod
-    def _parse_pausenpaar(von_text: str, bis_text: str) -> tuple[time | None, time | None]:
-        """Beide Pausenzeiten oder keine — unvollstaendige Paare gelten als leer."""
+    def _parse_pausenpaar(
+        von_text: str,
+        bis_text: str,
+        *,
+        fuer_speichern: bool = False,
+    ) -> tuple[time | None, time | None]:
+        """Beide Pausenzeiten oder keine; beim Speichern ist nur eine Haelfte unzulaessig."""
+        von_leer = not von_text.strip()
+        bis_leer = not bis_text.strip()
+        if von_leer and bis_leer:
+            return None, None
+        if fuer_speichern and (von_leer ^ bis_leer):
+            raise ValueError(
+                "Pause von und Pause bis muessen gemeinsam angegeben werden."
+            )
         von = ZeiteintragViewModel._parse_optional_time(von_text)
         bis = ZeiteintragViewModel._parse_optional_time(bis_text)
         if von is not None and bis is not None:

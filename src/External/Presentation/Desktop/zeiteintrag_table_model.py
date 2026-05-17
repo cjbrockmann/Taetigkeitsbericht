@@ -159,7 +159,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "F",
         "U",
         "K",
-        "Sz",
+        "Sf",
         "Bf",
         "Von",
         "Bis",

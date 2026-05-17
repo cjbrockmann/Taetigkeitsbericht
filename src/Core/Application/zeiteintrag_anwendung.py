@@ -96,6 +96,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self._sollstunden_an_feiertagen: bool = False
         self._kommentar_urlaubstage: str = ""
         self._kommentar_krankheitstage: str = ""
+        self._kommentar_ueberstunden_frei: str = "Überstunden frei"
 
     # ----------------------------------------------------------------------  
     #   Overwrite der Basisfunktionen
@@ -292,6 +293,18 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         """Praefix/Kuerzel fuer Kommentar an Krankheitstagen ([sollstunden].kommentar_krankheitstage)."""
         self._kommentar_krankheitstage = text.strip()
 
+    def set_kommentar_ueberstunden_frei(self, text: str) -> None:
+        """Kommentar bei uhrzeit_von = uhrzeit_bis ([sollstunden].kommentar_ueberstunden_frei)."""
+        t = text.strip()
+        self._kommentar_ueberstunden_frei = t if t else "Überstunden frei"
+
+    def _ist_ueberstunden_frei_zeitraum(self, eintrag: ZeiteintragsDTO) -> bool:
+        return (
+            eintrag.uhrzeit_von is not None
+            and eintrag.uhrzeit_bis is not None
+            and eintrag.uhrzeit_von == eintrag.uhrzeit_bis
+        )
+
     def _kuerze_anmerkung(self, text: str) -> str:
         return text[: self._MAX_ANMERKUNG_LAENGE]
 
@@ -314,7 +327,11 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             eintrag.anmerkung = self._kuerze_anmerkung(f"{prefix_mit_trenner}{bestehend}")
 
     def _wende_kommentar_regeln_an(self, eintrag: ZeiteintragsDTO) -> None:
-        """Feiertagsname; Krank (K) vor Urlaub (U), jeweils gemaess Config."""
+        """Ueberstunden-frei; Feiertagsname; Krank (K) vor Urlaub (U), jeweils gemaess Config."""
+        if self._ist_ueberstunden_frei_zeitraum(eintrag):
+            eintrag.anmerkung = self._kuerze_anmerkung(self._kommentar_ueberstunden_frei)
+            return
+
         bestehend = (eintrag.anmerkung or "").strip()
         if eintrag.ist_feiertag and not bestehend:
             name = (eintrag.feiertagsname or "").strip()
@@ -426,17 +443,17 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             )
 
     def _setze_soll_felder_fuer_tag(self, eintraege: list[ZeiteintragsDTO]) -> None:
-        """Vertrag-Soll nur Zeile 1; Stundenplan-Soll pro Zeile (Index-Match, Rest auf letzte Zeile)."""
+        """Vertrag-Soll Zeile 1 (bei Krank/Urlaub dort Vertrags-Soll); Stundenplan-Soll wie Werktag."""
         if not eintraege:
             return
         if self._ist_krank_oder_urlaub_tag(eintraege[0]):
             vertrag_soll = self._berechne_soll_stunden_nach_vertrag(eintraege[0].datum)
             for i, eintrag in enumerate(eintraege):
-                eintrag.soll_stunden_nach_Stundenplan = None
                 if i == 0:
                     eintrag.soll_stunden_nach_vertrag = vertrag_soll
                 else:
                     eintrag.soll_stunden_nach_vertrag = None
+            self._verteile_soll_stunden_nach_stundenplan(eintraege)
             return
         for i, eintrag in enumerate(eintraege):
             if i == 0:

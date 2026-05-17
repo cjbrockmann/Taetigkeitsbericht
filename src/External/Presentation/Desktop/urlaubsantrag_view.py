@@ -39,6 +39,7 @@ from External.Presentation.Desktop.urlaubsantrag_view_model import Urlaubsantrag
 
 class UrlaubsantragView(QWidget):
     _STANDARD_URLAUBSTYP = "Jahresurlaub"
+    _URLAUBSTYP_AUSWAHL = ("Jahresurlaub", "Sonderurlaub")
 
     def __init__(
         self,
@@ -48,9 +49,6 @@ class UrlaubsantragView(QWidget):
     ) -> None:
         super().__init__(parent)
         self._view_model = view_model
-        self._kommentar_ueberstunden_frei = (
-            app_config.kommentar_ueberstunden_frei.strip() or "Ü-Frei"
-        )
         self._initial_load_done = False
         self._bearbeitungs_id: int | None = None
         self._neuanlage_form_snapshot: tuple[str, str, str, str, str] = ()
@@ -124,11 +122,10 @@ class UrlaubsantragView(QWidget):
         self._urlaubstyp_input.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        self._urlaubstyp_input.addItem(self._STANDARD_URLAUBSTYP)
-        if self._kommentar_ueberstunden_frei != self._STANDARD_URLAUBSTYP:
-            self._urlaubstyp_input.addItem(self._kommentar_ueberstunden_frei)
+        for urlaubstyp in self._URLAUBSTYP_AUSWAHL:
+            self._urlaubstyp_input.addItem(urlaubstyp)
         self._urlaubstyp_input.setCurrentText(self._STANDARD_URLAUBSTYP)
-        self._urlaubstyp_input.lineEdit().setPlaceholderText("z. B. Erholungsurlaub")
+        self._urlaubstyp_input.lineEdit().setPlaceholderText("Jahresurlaub oder Sonderurlaub")
         self._urlaubstage_spin = QDoubleSpinBox(self._form_group)
         self._urlaubstage_spin.setRange(0.0, 366.0)
         self._urlaubstage_spin.setDecimals(1)
@@ -218,7 +215,7 @@ class UrlaubsantragView(QWidget):
         header.resizeSection(0, 95)
         header.resizeSection(1, 95)
         header.resizeSection(2, 120)
-        header.resizeSection(3, 50)
+        header.resizeSection(3, 100)
         header.setStretchLastSection(True)
 
 
