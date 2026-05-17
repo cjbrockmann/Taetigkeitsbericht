@@ -2,6 +2,8 @@
 url = "https://feiertage-api.de/api/"
 bundesland = "Hessen"
 bundesland_code = "HE"
+# Nur beim Import aus dem Internet: zusaetzliche Tage aus JSON (relativ zu src/)
+zusatz_import_datei = "feiertag_zusatz_import.json"
 
 [schulferien_api]
 url = "https://schulferien-api.de/api/"

@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -23,7 +22,11 @@ from PySide6.QtWidgets import (
 
 from External.Presentation.Desktop.krankmeldung_table_model import KrankmeldungRow
 from External.Presentation.Desktop.krankmeldung_view_model import KrankmeldungViewModel
-from External.Presentation.Desktop.form_bearbeitung_dirty import dirty_indices_bei_form_bearbeitung
+from External.Presentation.Desktop.message_boxes import warnung
+from External.Presentation.Desktop.form_bearbeitung_dirty import (
+    dirty_indices_bei_form_bearbeitung,
+    hat_ungespeicherte_formular_aenderungen,
+)
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
     STANDARD_TABLE_VIEW_STYLESHEET,
@@ -39,8 +42,10 @@ class KrankmeldungView(QWidget):
         self._initial_load_done = False
         self._suspend_selection_sync = False
         self._bearbeitungs_id: int | None = None
+        self._neuanlage_form_snapshot: tuple[str, str, int] = ()
         self._build_ui()
         self._bind_view_model()
+        self._reset_formular_defaults()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -96,6 +101,8 @@ class KrankmeldungView(QWidget):
         self._krankmeldungstage_spin.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
+        self._krankheitstage_hinweis = QLabel("", self._form_group)
+        self._krankheitstage_hinweis.setStyleSheet("color: #616161;")
         stage_zeile = QWidget(self._form_group)
         stage_zeile.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
@@ -103,6 +110,7 @@ class KrankmeldungView(QWidget):
         stage_zeile_layout = QHBoxLayout(stage_zeile)
         stage_zeile_layout.setContentsMargins(0, 0, 0, 0)
         stage_zeile_layout.addWidget(self._krankmeldungstage_spin, 0)
+        stage_zeile_layout.addWidget(self._krankheitstage_hinweis, 0)
         stage_zeile_layout.addStretch(1)
 
         form_layout.addRow("Krank von:", self._krank_von_input)
@@ -184,10 +192,36 @@ class KrankmeldungView(QWidget):
     def _bind_form_dirty_updates(self) -> None:
         self._krank_von_input.dateChanged.connect(self._on_form_changed)
         self._krank_bis_input.dateChanged.connect(self._on_form_changed)
+        self._krank_bis_input.dateChanged.connect(
+            self._aktualisiere_krankheitstage_eingabehilfe
+        )
         self._krankmeldungstage_spin.valueChanged.connect(self._on_form_changed)
 
     def _on_form_changed(self, *_args) -> None:
         self._update_dirty_rows()
+
+    @staticmethod
+    def _kalendertage_inklusiv(von_q: QDate, bis_q: QDate) -> int | None:
+        if not von_q.isValid() or not bis_q.isValid():
+            return None
+        von = date(von_q.year(), von_q.month(), von_q.day())
+        bis = date(bis_q.year(), bis_q.month(), bis_q.day())
+        if bis < von:
+            return None
+        return (bis - von).days + 1
+
+    def _aktualisiere_krankheitstage_eingabehilfe(self, *_args) -> None:
+        """Hinweis neben Krankheitstage: Kalendertage von–bis (nur Anzeige, kein Auto-Wert)."""
+        tage = self._kalendertage_inklusiv(
+            self._krank_von_input.date(), self._krank_bis_input.date()
+        )
+        if tage is None:
+            self._krankheitstage_hinweis.setText("")
+            return
+        if tage == 1:
+            self._krankheitstage_hinweis.setText("1 Kalendertag (von–bis)")
+        else:
+            self._krankheitstage_hinweis.setText(f"{tage} Kalendertage (von–bis)")
 
     def _on_selection_repaint_dirty(self, *_args) -> None:
         self._view_model.table_model.repaint_dirty_rows()
@@ -213,6 +247,28 @@ class KrankmeldungView(QWidget):
             )
         )
 
+    def _form_state_snapshot(self) -> tuple[str, str, int]:
+        return (
+            self._krank_von_input.date().toString("dd.MM.yyyy"),
+            self._krank_bis_input.date().toString("dd.MM.yyyy"),
+            self._krankmeldungstage_spin.value(),
+        )
+
+    def _neuanlage_formular_abweichend(self) -> bool:
+        return self._form_state_snapshot() != self._neuanlage_form_snapshot
+
+    @property
+    def has_unsaved_changes(self) -> bool:
+        model = self._view_model.table_model
+        return hat_ungespeicherte_formular_aenderungen(
+            dirty_rows=model._dirty_rows,
+            bearbeitungs_id=self._bearbeitungs_id,
+            neuanlage_formular_abweichend=self._neuanlage_formular_abweichend(),
+        )
+
+    def verwerfe_ungespeicherte_aenderungen(self) -> None:
+        self._lade_auswahl_jahr()
+
     def _bind_view_model(self) -> None:
         self._view_model.status_changed.connect(self._status_label.setText)
         self._view_model.error_occurred.connect(self._show_error)
@@ -228,6 +284,8 @@ class KrankmeldungView(QWidget):
         for de in (self._krank_von_input, self._krank_bis_input):
             de.blockSignals(False)
         self._krankmeldungstage_spin.setValue(1)
+        self._aktualisiere_krankheitstage_eingabehilfe()
+        self._neuanlage_form_snapshot = self._form_state_snapshot()
         self._aktualisiere_formular_titel()
 
     def _aktualisiere_formular_titel(self) -> None:
@@ -273,6 +331,7 @@ class KrankmeldungView(QWidget):
         self._krankmeldungstage_spin.setValue(
             int(float(row.krankmeldungstage.strip().replace(",", ".")))
         )
+        self._aktualisiere_krankheitstage_eingabehilfe()
 
     def _aktualisiere_selektions_buttons(self) -> None:
         sm = self._table.selectionModel()
@@ -351,4 +410,4 @@ class KrankmeldungView(QWidget):
             self._show_error(str(exc))
 
     def _show_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Krankmeldung", message)
+        warnung(self, "Krankmeldung", message)

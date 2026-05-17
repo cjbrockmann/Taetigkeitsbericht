@@ -22,3 +22,14 @@ def dirty_indices_bei_form_bearbeitung(
         if row_id == bearbeitungs_id and not form_enthaelt_gespeicherte_zeile(row):
             dirty.add(index)
     return dirty
+
+
+def hat_ungespeicherte_formular_aenderungen(
+    *,
+    dirty_rows: set[int],
+    bearbeitungs_id: int | None,
+    neuanlage_formular_abweichend: bool,
+) -> bool:
+    if dirty_rows:
+        return True
+    return bearbeitungs_id is None and neuanlage_formular_abweichend

@@ -14,6 +14,9 @@ class FeiertagAnwendung:
     def erfasse(self, eintrag: Feiertag) -> Feiertag:
         return self._service.erfasse_feiertag(eintrag)
 
+    def aktualisiere(self, eintrag: Feiertag) -> bool:
+        return self._service.aktualisiere_feiertag(eintrag)
+
     def hole_fuer_datum(self, datum: date) -> list[Feiertag]:
         return self._service.hole_feiertag(datum)
 

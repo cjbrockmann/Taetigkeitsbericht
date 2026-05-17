@@ -4,8 +4,19 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from uuid import UUID
 
-from PySide6.QtCore import QModelIndex, QPersistentModelIndex, QRect, QSize, Qt
-from PySide6.QtGui import QCloseEvent, QColor, QGuiApplication, QIcon, QKeySequence, QPalette, QShortcut
+from PySide6.QtCore import QEvent, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt
+from PySide6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QGuiApplication,
+    QIcon,
+    QKeySequence,
+    QMouseEvent,
+    QPalette,
+    QResizeEvent,
+    QShortcut,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -14,7 +25,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QStyle,
@@ -23,6 +33,7 @@ from PySide6.QtWidgets import (
     QStyleOptionViewItem,
     QTableView,
     QTabWidget,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -38,8 +49,12 @@ from External.Presentation.Desktop.table_view_styles import (
     ZEITEINTRAG_TABLE_VIEW_STYLESHEET,
     paint_option_mit_zeilenfarbe,
 )
+from External.Presentation.Desktop.message_boxes import frage_ja_nein, warnung
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
-from External.Presentation.Desktop.zeiteintrag_table_model import ZeiteintragTableModel
+from External.Presentation.Desktop.zeiteintrag_table_model import (
+    ZeiteintragSpalte,
+    ZeiteintragTableModel,
+)
 from External.Presentation.Desktop.zeiteintrag_view_model import ZeiteintragViewModel
 
 
@@ -72,10 +87,14 @@ class LiveCommitDelegate(DirtyRowItemDelegate):
     def setModelData(self, editor, model, index):  # noqa: N802
         if isinstance(editor, QLineEdit):
             text = editor.text()
-            if index.column() != 11:
+            if index.column() != ZeiteintragSpalte.KOMMENTAR:
                 text = text.strip()
             is_live_commit = bool(editor.property("_live_commit"))
-            if not is_live_commit and index.column() in (2, 3, 4, 5, 6, 7) and text.isdigit():
+            if (
+                not is_live_commit
+                and index.column() in ZeiteintragSpalte.ZEITFELDER
+                and text.isdigit()
+            ):
                 hour = int(text)
                 if 0 <= hour <= 23:
                     text = f"{hour:02d}:00"
@@ -152,14 +171,70 @@ class WochentagMitSternDelegate(LiveCommitDelegate):
         painter.restore()
 
 
+class StatusKennzeichenDelegate(DirtyRowItemDelegate):
+    """Zentriertes Status-Icon in den schmalen Kennzeichen-Spalten."""
+
+    def paint(self, painter, option, index):  # noqa: N802
+        if index.column() not in ZeiteintragSpalte.STATUS_KENNZEICHEN:
+            super().paint(painter, option, index)
+            return
+
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+
+        model = index.model()
+        is_dirty = (
+            model is not None
+            and hasattr(model, "is_row_dirty")
+            and model.is_row_dirty(index.row())
+        )
+        opt = paint_option_mit_zeilenfarbe(opt, is_dirty)
+
+        widget = option.widget
+        style = widget.style() if widget is not None else None
+
+        painter.save()
+        painter.setClipRect(option.rect)
+
+        if style is not None:
+            style.drawPrimitive(
+                QStyle.PrimitiveElement.PE_PanelItemViewItem,
+                opt,
+                painter,
+                widget,
+            )
+
+        icon = index.data(Qt.ItemDataRole.DecorationRole)
+        if isinstance(icon, QIcon) and not icon.isNull():
+            rand = ZeiteintragSpalte.STATUS_ICON_RAND
+            verfuegbar = min(option.rect.width(), option.rect.height())
+            groesse = min(
+                ZeiteintragSpalte.STATUS_ICON_MAX_GROESSE,
+                max(12, verfuegbar - 2 * rand),
+            )
+            icon_rect = QRect(
+                option.rect.center().x() - groesse // 2,
+                option.rect.center().y() - groesse // 2,
+                groesse,
+                groesse,
+            )
+            icon.paint(painter, icon_rect, Qt.AlignmentFlag.AlignCenter)
+
+        painter.restore()
+
+
 class GruppenHeaderView(QHeaderView):
     def __init__(self, orientation: Qt.Orientation, parent=None) -> None:
         super().__init__(orientation, parent)
         self._gruppen = [
-            ("Arbeitsphase", 2, 3),
-            ("Pause", 4, 5),
-            ("Pause 2", 6, 7),
-            ("Arbeitsstunden", 8, 10),
+            ("Arbeitsphase", ZeiteintragSpalte.VON, ZeiteintragSpalte.BIS),
+            ("Pause", ZeiteintragSpalte.PAUSE1_VON, ZeiteintragSpalte.PAUSE1_BIS),
+            ("Pause 2", ZeiteintragSpalte.PAUSE2_VON, ZeiteintragSpalte.PAUSE2_BIS),
+            (
+                "Arbeitsstunden",
+                ZeiteintragSpalte.GELEISTET,
+                ZeiteintragSpalte.VERTRAG,
+            ),
         ]
         self.setDefaultAlignment(Qt.AlignCenter)
 
@@ -184,7 +259,13 @@ class GruppenHeaderView(QHeaderView):
         self.initStyleOption(bottom_option)
         bottom_option.rect = bottom_rect
         bottom_option.section = logical_index
-        bottom_option.text = str(model.headerData(logical_index, Qt.Horizontal, Qt.DisplayRole) or "")
+        bottom_option.text = str(
+            model.headerData(logical_index, Qt.Horizontal, Qt.DisplayRole) or ""
+        )
+        if logical_index in ZeiteintragSpalte.STATUS_KENNZEICHEN:
+            bottom_option.textAlignment = (
+                Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
+            )
         self.style().drawControl(QStyle.ControlElement.CE_Header, bottom_option, painter, self)
 
         gruppe = next((g for g in self._gruppen if g[1] <= logical_index <= g[2]), None)
@@ -215,8 +296,32 @@ class GruppenHeaderView(QHeaderView):
         self.style().drawControl(QStyle.ControlElement.CE_Header, top_option, painter, self)
         painter.restore()
 
+    def viewportEvent(self, event):  # noqa: N802
+        if event.type() == QEvent.Type.ToolTip:
+            logical_index = self.logicalIndexAt(event.pos())
+            if logical_index >= 0:
+                model = self.model()
+                if model is not None:
+                    tooltip = model.headerData(
+                        logical_index,
+                        Qt.Orientation.Horizontal,
+                        Qt.ItemDataRole.ToolTipRole,
+                    )
+                    if tooltip:
+                        QToolTip.showText(event.globalPos(), str(tooltip), self)
+                        return True
+        return super().viewportEvent(event)
+
 
 class ZeiteintragWindow(QMainWindow):
+    _TAB_ZEITEINTRAEGE = 0
+    _TAB_STUNDENPLAN = 1
+    _TAB_URLAUB = 2
+    _TAB_KRANK = 3
+    _TAB_FEIERTAGE = 4
+    _TAB_BETRIEBSFERIEN = 5
+    _TAB_SCHULFERIEN = 6
+
     def __init__(
         self,
         view_model: ZeiteintragViewModel,
@@ -245,6 +350,8 @@ class ZeiteintragWindow(QMainWindow):
         self._ignore_period_change = False
         self._suspend_dirty_tracking = False
         self._baseline_rows: list[tuple[object, str, str, str, str, str, str, str, str]] = []
+        self._bestaetigter_tab_index = self._TAB_ZEITEINTRAEGE
+        self._tab_wechsel_blockiert = False
         self.setWindowTitle("Taetigkeitsbericht - Erfassung")
         self.resize(1200, 640)
         self._build_ui()
@@ -265,13 +372,20 @@ class ZeiteintragWindow(QMainWindow):
             self._monat_combo.addItem(f"{monat:02d}", monat)
         self._monat_combo.setCurrentIndex(date.today().month - 1)
 
-        self._laden_button = QPushButton("Laden", self)
+        self._laden_button = QPushButton("Zuruecksetzen", self)
+        self._laden_button.setEnabled(False)
         self._excel_kopieren_button = QPushButton("Fuer Excel kopieren", self)
         self._excel_kopieren_button.setToolTip(
             "Alle Datenzeilen als TSV in die Zwischenablage. "
             "Ablauf und Kopfzeile: siehe [zeiteintrag_excel_export] in config.toml; "
             "ausgeblendete Spalten (siehe [zeiteintrag_tabelle]) sind im Export nutzbar."
         )
+        self._loesch_hinweis_label = QLabel(self)
+        self._loesch_hinweis_label.setStyleSheet("color: red;")
+        self._loesch_hinweis_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._loesch_hinweis_label.hide()
         self._zeile_hinzufuegen_button = QPushButton("Zeile hinzufuegen", self)
         self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) loeschen", self)
         self._speichern_button = QPushButton("Alle Zeilen speichern", self)
@@ -295,7 +409,9 @@ class ZeiteintragWindow(QMainWindow):
         toolbar_layout.addWidget(self._monat_combo)
         toolbar_layout.addWidget(self._laden_button)
         toolbar_layout.addWidget(self._excel_kopieren_button)
-        toolbar_layout.addStretch()
+        toolbar_layout.addStretch(1)
+        toolbar_layout.addWidget(self._loesch_hinweis_label)
+        toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self._zeile_hinzufuegen_button)
         toolbar_layout.addWidget(self._zeile_loeschen_button)
         toolbar_layout.addWidget(self._speichern_button)
@@ -305,6 +421,9 @@ class ZeiteintragWindow(QMainWindow):
         self._table.setHorizontalHeader(GruppenHeaderView(Qt.Horizontal, self._table))
         self._table.setItemDelegate(LiveCommitDelegate(self._table))
         self._table.setItemDelegateForColumn(0, WochentagMitSternDelegate(self._table))
+        status_delegate = StatusKennzeichenDelegate(self._table)
+        for spalte in ZeiteintragSpalte.STATUS_KENNZEICHEN:
+            self._table.setItemDelegateForColumn(spalte, status_delegate)
         self._table.setAlternatingRowColors(True)
         self._table.setShowGrid(True)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -312,20 +431,30 @@ class ZeiteintragWindow(QMainWindow):
         self._table.setStyleSheet(ZEITEINTRAG_TABLE_VIEW_STYLESHEET)
         horizontal_header = self._table.horizontalHeader()
         horizontal_header.setStretchLastSection(False)
-        horizontal_header.resizeSection(0, 50)
-        horizontal_header.resizeSection(4, 60)
-        horizontal_header.resizeSection(5, 60)
-        horizontal_header.resizeSection(6, 60)
-        horizontal_header.resizeSection(7, 60)
-        horizontal_header.resizeSection(8, 80)
-        horizontal_header.resizeSection(9, 72)
-        horizontal_header.resizeSection(10, 88)
-        horizontal_header.resizeSection(11, 220)
-        horizontal_header.resizeSection(12, 34)
-        horizontal_header.setSectionResizeMode(11, QHeaderView.ResizeMode.Stretch)
-        horizontal_header.setSectionResizeMode(12, QHeaderView.ResizeMode.Fixed)
+        horizontal_header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        horizontal_header.resizeSection(ZeiteintragSpalte.TAG, 50)
+        horizontal_header.resizeSection(ZeiteintragSpalte.DATUM, 88)
+        for spalte in ZeiteintragSpalte.STATUS_KENNZEICHEN:
+            horizontal_header.resizeSection(spalte, ZeiteintragSpalte.STATUS_SPALTE_BREITE)
+        for spalte in ZeiteintragSpalte.ZEITFELDER:
+            horizontal_header.resizeSection(spalte, ZeiteintragSpalte.ZEIT_SPALTE_BREITE)
+        horizontal_header.resizeSection(ZeiteintragSpalte.GELEISTET, 80)
+        horizontal_header.resizeSection(ZeiteintragSpalte.SOLL, 72)
+        horizontal_header.resizeSection(ZeiteintragSpalte.VERTRAG, 88)
+        horizontal_header.resizeSection(
+            ZeiteintragSpalte.KOMMENTAR, ZeiteintragSpalte.KOMMENTAR_MIN_BREITE
+        )
+        horizontal_header.resizeSection(ZeiteintragSpalte.TAG_EXCEL, 34)
+        horizontal_header.resizeSection(
+            ZeiteintragSpalte.FEIERTAGSNAME, ZeiteintragSpalte.NAME_SPALTE_BREITE
+        )
+        horizontal_header.resizeSection(
+            ZeiteintragSpalte.SCHULFERIENNAME, ZeiteintragSpalte.NAME_SPALTE_BREITE
+        )
+        self._table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         for spalte in self._ausgeblendete_spalten:
             self._table.setColumnHidden(spalte, True)
+        self._aktualisiere_kommentar_breite()
         self._table.verticalHeader().setVisible(True)
 
         root_layout.addLayout(toolbar_layout)
@@ -339,12 +468,14 @@ class ZeiteintragWindow(QMainWindow):
         self._tab_widget = QTabWidget(self)
         self._tab_widget.addTab(zeiteintrag_widget, "Zeiteintraege")
         self._tab_widget.addTab(self._stundenplan_view, "Stundenplan")
-        self._tab_widget.addTab(self._feiertag_view, "Feiertage")
         self._tab_widget.addTab(self._urlaubsantrag_view, "Urlaub")
         self._tab_widget.addTab(self._krankmeldung_view, "Krankmeldung")
+        self._tab_widget.addTab(self._feiertag_view, "Feiertage")
         self._tab_widget.addTab(self._betriebsferien_view, "Betriebsferien")
         self._tab_widget.addTab(self._schulferien_view, "Schulferien")
         self.setCentralWidget(self._tab_widget)
+        self._tab_widget.tabBar().installEventFilter(self)
+        self._tab_widget.currentChanged.connect(self._on_tab_current_changed)
 
         self._laden_button.clicked.connect(self._on_laden)
         self._excel_kopieren_button.clicked.connect(self._kopiere_tabelle_fuer_excel)
@@ -361,6 +492,30 @@ class ZeiteintragWindow(QMainWindow):
         selection_model = self._table.selectionModel()
         if selection_model is not None:
             selection_model.selectionChanged.connect(self._on_selection_changed)
+
+    def _aktualisiere_kommentar_breite(self) -> None:
+        """Kommentarspalte: mindestens KOMMENTAR_MIN_BREITE, sonst restliche Tabellenbreite."""
+        model = self._table.model()
+        if model is None:
+            return
+        header = self._table.horizontalHeader()
+        andere = sum(
+            header.sectionSize(col)
+            for col in range(model.columnCount())
+            if col != ZeiteintragSpalte.KOMMENTAR and not self._table.isColumnHidden(col)
+        )
+        verfuegbar = max(0, self._table.viewport().width())
+        ziel = max(ZeiteintragSpalte.KOMMENTAR_MIN_BREITE, verfuegbar - andere)
+        if header.sectionSize(ZeiteintragSpalte.KOMMENTAR) != ziel:
+            header.resizeSection(ZeiteintragSpalte.KOMMENTAR, ziel)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._aktualisiere_kommentar_breite()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._aktualisiere_kommentar_breite()
 
     def _bind_view_model(self) -> None:
         self._view_model.status_changed.connect(self._status_label.setText)
@@ -384,7 +539,9 @@ class ZeiteintragWindow(QMainWindow):
         )
 
     def _on_laden(self) -> None:
-        self._load_selected_period()
+        if not self._confirm_discard_tab_changes(self._TAB_ZEITEINTRAEGE):
+            return
+        self._reload_current_period()
 
     def _on_period_changed(self, *_args) -> None:
         if self._ignore_period_change:
@@ -406,36 +563,155 @@ class ZeiteintragWindow(QMainWindow):
             self._ignore_period_change = False
 
     def _confirm_discard_unsaved_changes(self) -> bool:
-        return (
-            QMessageBox.question(
-                self,
-                "Ungespeicherte Aenderungen",
-                "Es gibt ungespeicherte Zeilen. Beim Wechsel von Jahr/Monat gehen diese verloren. Trotzdem wechseln?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            == QMessageBox.Yes
+        return frage_ja_nein(
+            self,
+            "Ungespeicherte Aenderungen",
+            "Es gibt ungespeicherte Zeilen. Beim Wechsel von Jahr/Monat gehen diese verloren. "
+            "Trotzdem wechseln?",
+        )
+
+    def _confirm_discard_tab_changes(self, tab_index: int) -> bool:
+        if not self._tab_has_unsaved(tab_index):
+            return True
+        titel = self._tab_widget.tabText(tab_index)
+        return frage_ja_nein(
+            self,
+            "Ungespeicherte Aenderungen",
+            f"Im Reiter „{titel}“ gibt es ungespeicherte Aenderungen. "
+            "Verwerfen und fortfahren?",
         )
 
     def _confirm_close_with_unsaved_changes(self) -> bool:
-        return (
-            QMessageBox.question(
-                self,
-                "Ungespeicherte Aenderungen",
-                "Es gibt ungespeicherte Zeilen. Beim Schliessen gehen diese verloren. Trotzdem schliessen?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            == QMessageBox.Yes
+        return frage_ja_nein(
+            self,
+            "Ungespeicherte Aenderungen",
+            "Es gibt ungespeicherte Aenderungen. Beim Schliessen gehen diese verloren. "
+            "Trotzdem schliessen?",
+        )
+
+    def _tab_has_unsaved(self, tab_index: int) -> bool:
+        match tab_index:
+            case self._TAB_ZEITEINTRAEGE:
+                return self._has_unsaved_changes
+            case self._TAB_STUNDENPLAN:
+                return self._stundenplan_view.has_unsaved_changes
+            case self._TAB_URLAUB:
+                return self._urlaubsantrag_view.has_unsaved_changes
+            case self._TAB_KRANK:
+                return self._krankmeldung_view.has_unsaved_changes
+            case self._TAB_FEIERTAGE:
+                return self._feiertag_view.has_unsaved_changes
+            case self._TAB_BETRIEBSFERIEN:
+                return self._betriebsferien_view.has_unsaved_changes
+            case self._TAB_SCHULFERIEN:
+                return self._schulferien_view.has_unsaved_changes
+            case _:
+                return False
+
+    def _tab_verwerfe_ungespeichert(self, tab_index: int) -> None:
+        match tab_index:
+            case self._TAB_ZEITEINTRAEGE:
+                self._reload_current_period()
+            case self._TAB_STUNDENPLAN:
+                self._stundenplan_view.verwerfe_ungespeicherte_aenderungen()
+            case self._TAB_URLAUB:
+                self._urlaubsantrag_view.verwerfe_ungespeicherte_aenderungen()
+            case self._TAB_KRANK:
+                self._krankmeldung_view.verwerfe_ungespeicherte_aenderungen()
+            case self._TAB_FEIERTAGE:
+                self._feiertag_view.verwerfe_ungespeicherte_aenderungen()
+            case self._TAB_BETRIEBSFERIEN:
+                self._betriebsferien_view.verwerfe_ungespeicherte_aenderungen()
+            case self._TAB_SCHULFERIEN:
+                self._schulferien_view.verwerfe_ungespeicherte_aenderungen()
+
+    def _on_tab_entered(self, tab_index: int) -> None:
+        if tab_index == self._TAB_ZEITEINTRAEGE:
+            self._reload_current_period()
+
+    def _finalize_tab_wechsel(self, previous: int, new_index: int) -> None:
+        self._tab_verwerfe_ungespeichert(previous)
+        self._bestaetigter_tab_index = new_index
+        self._on_tab_entered(new_index)
+
+    def _versuche_tab_wechsel_zu(self, target_index: int) -> bool:
+        previous = self._bestaetigter_tab_index
+        if target_index == previous:
+            return True
+        if not self._confirm_discard_tab_changes(previous):
+            return False
+        self._tab_wechsel_blockiert = True
+        try:
+            self._tab_widget.setCurrentIndex(target_index)
+        finally:
+            self._tab_wechsel_blockiert = False
+        self._finalize_tab_wechsel(previous, target_index)
+        return True
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        tab_bar = self._tab_widget.tabBar()
+        if watched is tab_bar:
+            if event.type() == QEvent.Type.MouseButtonPress:
+                mouse = event
+                if not isinstance(mouse, QMouseEvent):
+                    return super().eventFilter(watched, event)
+                if mouse.button() != Qt.MouseButton.LeftButton:
+                    return super().eventFilter(watched, event)
+                index = tab_bar.tabAt(mouse.position().toPoint())
+                if index < 0 or index == self._bestaetigter_tab_index:
+                    return super().eventFilter(watched, event)
+                if self._versuche_tab_wechsel_zu(index):
+                    return True
+                return True
+            if event.type() == QEvent.Type.KeyPress:
+                key = event.key()
+                current = self._bestaetigter_tab_index
+                count = tab_bar.count()
+                if key in (Qt.Key.Key_Left, Qt.Key.Key_Up):
+                    target = max(0, current - 1)
+                elif key in (Qt.Key.Key_Right, Qt.Key.Key_Down):
+                    target = min(count - 1, current + 1)
+                elif key == Qt.Key.Key_Home:
+                    target = 0
+                elif key == Qt.Key.Key_End:
+                    target = count - 1
+                else:
+                    return super().eventFilter(watched, event)
+                if target == current:
+                    return super().eventFilter(watched, event)
+                if self._versuche_tab_wechsel_zu(target):
+                    return True
+                return True
+        return super().eventFilter(watched, event)
+
+    def _on_tab_current_changed(self, new_index: int) -> None:
+        if self._tab_wechsel_blockiert:
+            return
+        previous = self._bestaetigter_tab_index
+        if previous == new_index:
+            return
+        if not self._confirm_discard_tab_changes(previous):
+            self._tab_wechsel_blockiert = True
+            try:
+                self._tab_widget.setCurrentIndex(previous)
+            finally:
+                self._tab_wechsel_blockiert = False
+            return
+        self._finalize_tab_wechsel(previous, new_index)
+
+    def _any_tab_has_unsaved(self) -> bool:
+        return any(
+            self._tab_has_unsaved(tab_index)
+            for tab_index in range(self._tab_widget.count())
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        gibt_offene_aenderungen = (
-            self._has_unsaved_changes or self._stundenplan_view.has_unsaved_changes
-        )
-        if gibt_offene_aenderungen and not self._confirm_close_with_unsaved_changes():
+        if self._any_tab_has_unsaved() and not self._confirm_close_with_unsaved_changes():
             event.ignore()
             return
+        for tab_index in range(self._tab_widget.count()):
+            if self._tab_has_unsaved(tab_index):
+                self._tab_verwerfe_ungespeichert(tab_index)
         event.accept()
 
     def _load_selected_period(self) -> None:
@@ -464,6 +740,7 @@ class ZeiteintragWindow(QMainWindow):
         self._capture_baseline()
         self._has_unsaved_changes = False
         self._view_model.table_model.set_dirty_rows(set())
+        self._aktualisiere_zuruecksetzen_button()
 
     def _on_zeile_hinzufuegen(self) -> None:
         selection_model = self._table.selectionModel()
@@ -524,6 +801,7 @@ class ZeiteintragWindow(QMainWindow):
         self._capture_baseline()
         self._has_unsaved_changes = False
         self._view_model.table_model.set_dirty_rows(set())
+        self._aktualisiere_zuruecksetzen_button()
 
     def _on_selection_changed(self, *_args) -> None:
         self._view_model.table_model.repaint_dirty_rows()
@@ -645,13 +923,13 @@ class ZeiteintragWindow(QMainWindow):
         stundenplan_zeile = passende_stundenplan_zeilen[eintrags_index]
 
         feld_zu_spalte = {
-            "uhrzeit_von": 2,
-            "uhrzeit_bis": 3,
-            "pause_beginn": 4,
-            "pause_ende": 5,
-            "pause2_beginn": 6,
-            "pause2_ende": 7,
-            "anmerkung": 11,
+            "uhrzeit_von": ZeiteintragSpalte.VON,
+            "uhrzeit_bis": ZeiteintragSpalte.BIS,
+            "pause_beginn": ZeiteintragSpalte.PAUSE1_VON,
+            "pause_ende": ZeiteintragSpalte.PAUSE1_BIS,
+            "pause2_beginn": ZeiteintragSpalte.PAUSE2_VON,
+            "pause2_ende": ZeiteintragSpalte.PAUSE2_BIS,
+            "anmerkung": ZeiteintragSpalte.KOMMENTAR,
         }
         for feldname, spalte in feld_zu_spalte.items():
             zielwert = getattr(row, feldname).strip()
@@ -663,7 +941,7 @@ class ZeiteintragWindow(QMainWindow):
             model.setData(model.index(row_idx, spalte), quellwert)
 
     def _show_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Fehler beim Speichern/Laden", message)
+        warnung(self, "Fehler beim Speichern/Laden", message)
 
     def _on_model_mutated(self, *_args) -> None:
         self._aktualisiere_summen_anzeige()
@@ -702,9 +980,23 @@ class ZeiteintragWindow(QMainWindow):
             )
         return snapshot
 
+    def _aktualisiere_zuruecksetzen_button(self) -> None:
+        self._laden_button.setEnabled(self._has_unsaved_changes)
+        anzahl = len(self._view_model.zu_loeschende_ids)
+        if anzahl == 0:
+            self._loesch_hinweis_label.hide()
+        else:
+            wort = "Zeile" if anzahl == 1 else "Zeilen"
+            self._loesch_hinweis_label.setText(f"{anzahl} {wort} zu loeschen")
+            self._loesch_hinweis_label.show()
+
     def _update_dirty_state(self) -> None:
-        self._has_unsaved_changes = self._current_rows_snapshot() != self._baseline_rows
+        self._has_unsaved_changes = (
+            self._current_rows_snapshot() != self._baseline_rows
+            or bool(self._view_model.zu_loeschende_ids)
+        )
         self._view_model.table_model.set_dirty_rows(self._compute_dirty_row_indices())
+        self._aktualisiere_zuruecksetzen_button()
 
     def _compute_dirty_row_indices(self) -> set[int]:
         baseline_by_id: dict[UUID, tuple[str, str, str, str, str, str, str, str]] = {

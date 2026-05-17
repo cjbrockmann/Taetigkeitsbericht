@@ -36,6 +36,10 @@ class DirtyRowTableModelMixin:
     def is_row_dirty(self, row_index: int) -> bool:
         return row_index in self._dirty_rows
 
+    @property
+    def has_dirty_rows(self) -> bool:
+        return bool(self._dirty_rows)
+
     def foreground_color_for_index(self, index: QModelIndex) -> QColor:
         if index.row() in self._dirty_rows:
             return QColor(DIRTY_ROW_TEXT_COLOR)

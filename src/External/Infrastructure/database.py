@@ -31,8 +31,39 @@ def _migrate_krankmeldung_spalten_entfernen(engine) -> None:
             conn.execute(text("ALTER TABLE krankmeldung DROP COLUMN krankmeldungstagsname"))
 
 
+def _migrate_feiertag_umfang_spalten(engine) -> None:
+    if not str(engine.url).startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        exists = conn.execute(
+            text(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='feiertag' LIMIT 1"
+            )
+        ).fetchone()
+        if exists is None:
+            return
+        cols = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(feiertag)")).fetchall()
+        }
+        if "ist_halber_tag" not in cols:
+            conn.execute(
+                text(
+                    "ALTER TABLE feiertag ADD COLUMN ist_halber_tag "
+                    "INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+        if "ist_offiziell" not in cols:
+            conn.execute(
+                text(
+                    "ALTER TABLE feiertag ADD COLUMN ist_offiziell "
+                    "INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+
+
 def init_db(engine) -> None:
     import External.Infrastructure.sqlmodel_tables  # noqa: F401 - Tabellen bei SQLModel registrieren
 
     SQLModel.metadata.create_all(engine)
     _migrate_krankmeldung_spalten_entfernen(engine)
+    _migrate_feiertag_umfang_spalten(engine)

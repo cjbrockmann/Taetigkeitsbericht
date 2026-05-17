@@ -34,38 +34,39 @@ prefix_kommentar_betriebsferientage = "B:"
 
 # Zeiteintrag-Tabelle (GUI): Spaltenindex 0–19 (ZeiteintragTableModel.HEADERS).
 # Nur in [zeiteintrag_tabelle].ausgeblendete_spalten eintragen; Daten bleiben im Modell.
-# [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (derzeit max. 12 in der App-Validierung).
+# [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (0–19).
 #
 #   0  Tag              — Wochentag (Mo–So), aus Datum, nur Anzeige
 #   1  Datum            — DD.MM.YYYY, bearbeitbar
-#   2  Von              — Arbeitsbeginn HH:MM
-#   3  Bis              — Arbeitsende HH:MM
-#   4  Von              — Pause 1 Beginn (optional)
-#   5  Bis              — Pause 1 Ende (optional)
-#   6  Von              — Pause 2 Beginn (optional)
-#   7  Bis              — Pause 2 Ende (optional)
-#   8  Geleistet        — berechnet / Anwendungsschicht, nur Anzeige
-#   9  Soll             — Soll nach Stundenplan, nur Anzeige
-#  10  Vertrag           — Soll nach Vertrag (Zeile 1 je Tag), nur Anzeige
-#  11  Kommentar         — Freitext max. 80 Zeichen, bearbeitbar
-#  12  Tag               — Kalendertag als Text fuer Excel (z. B. „7.“), nur Anzeige
-#  13  Urlaub            — Kennzeichen Urlaubstag (✓), nur Anzeige
-#  14  Krank             — Kennzeichen Krankheitstag (✓), nur Anzeige
-#  15  Feiertag          — Kennzeichen Feiertag (✓), nur Anzeige
-#  16  Ferien            — Kennzeichen Schulferien (✓), nur Anzeige
-#  17  Betriebsferien    — Kennzeichen Betriebsferien (✓), nur Anzeige
-#  18  Feiertagsname     — Name des Feiertags, nur Anzeige
-#  19  Schulferienname   — Name der Schulferien, nur Anzeige
+#   2  F                — Feiertag (Stern-Icon), nur Anzeige
+#   3  U                — Urlaub (Icon), nur Anzeige
+#   4  K                — Krank (Icon), nur Anzeige
+#   5  Sz               — Schulferien (Icon), nur Anzeige
+#   6  Bf               — Betriebsferien (Icon), nur Anzeige
+#   7  Von              — Arbeitsbeginn HH:MM
+#   8  Bis              — Arbeitsende HH:MM
+#   9  Von              — Pause 1 Beginn (optional)
+#  10  Bis              — Pause 1 Ende (optional)
+#  11  Von              — Pause 2 Beginn (optional)
+#  12  Bis              — Pause 2 Ende (optional)
+#  13  Geleistet        — berechnet / Anwendungsschicht, nur Anzeige
+#  14  Soll             — Soll nach Stundenplan, nur Anzeige
+#  15  Vertrag          — Soll nach Vertrag (Zeile 1 je Tag), nur Anzeige
+#  16  Kommentar        — Freitext max. 80 Zeichen, bearbeitbar
+#  17  Tag              — Kalendertag als Text fuer Excel (z. B. „7.“), nur Anzeige
+#  18  Feiertagsname    — Name des Feiertags, nur Anzeige
+#  19  Schulferienname  — Name der Schulferien, nur Anzeige
 #
 
 
 # Stundenplan: Spalten 0–8 nur ausblenden (0 Wochentag, 1–2 Arbeitsphase, 3–4 Pause, 5–6 Pause 2, 7 Soll, 8 Kommentar).
 [stundenplan_tabelle]
-ausgeblendete_spalten = [12]
+ausgeblendete_spalten = []
 
 
 [zeiteintrag_tabelle]
-ausgeblendete_spalten = []
+# Spalte 17 = Kalendertag fuer Excel (nur Export, bleibt fuer cell_spec erhalten)
+ausgeblendete_spalten = [17]
 
 
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).
@@ -80,5 +81,5 @@ ausgeblendete_spalten = []
 include_header = false
 leading_empty_columns = 0
 trailing_empty_columns = 0
-cell_spec = [ 0, 12, 2, 3, 4, 5, 6, 7, "blank", "blank", 11]
+cell_spec = [ 0, 17, 7, 8, 9, 10, 11, 12, "blank", "blank", 16]
 

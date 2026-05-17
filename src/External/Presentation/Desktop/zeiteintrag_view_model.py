@@ -131,7 +131,11 @@ class ZeiteintragViewModel(QObject):
             return
         if not roles or Qt.ItemDataRole.EditRole not in roles:
             return
-        if top_left.column() > 7 or bottom_right.column() < 1:
+        geaenderte_spalten = set(
+            range(top_left.column(), bottom_right.column() + 1)
+        )
+        relevant = {1} | set(range(7, 13))
+        if not (geaenderte_spalten & relevant):
             return
         daten: set[date] = set()
         for row_index in range(top_left.row(), bottom_right.row() + 1):
@@ -250,15 +254,21 @@ class ZeiteintragViewModel(QObject):
         erfolgreich = 0
         for zeilen_nummer, row in zeilen_zum_speichern:
             try:
+                pause1_von, pause1_bis = self._parse_pausenpaar(
+                    row.pause_beginn, row.pause_ende
+                )
+                pause2_von, pause2_bis = self._parse_pausenpaar(
+                    row.pause2_beginn, row.pause2_ende
+                )
                 eintrag = Zeiteintrag(
                     id=row.id,
                     datum=self._parse_date(row.datum),
                     uhrzeit_von=self._parse_time(row.uhrzeit_von, "uhrzeit_von"),
                     uhrzeit_bis=self._parse_time(row.uhrzeit_bis, "uhrzeit_bis"),
-                    pause_beginn=self._parse_optional_time(row.pause_beginn),
-                    pause_ende=self._parse_optional_time(row.pause_ende),
-                    pause2_beginn=self._parse_optional_time(row.pause2_beginn),
-                    pause2_ende=self._parse_optional_time(row.pause2_ende),
+                    pause_beginn=pause1_von,
+                    pause_ende=pause1_bis,
+                    pause2_beginn=pause2_von,
+                    pause2_ende=pause2_bis,
                     anmerkung=row.anmerkung or None,
                 )
                 gespeicherter_eintrag = self._anwendung.erfasse(eintrag)
@@ -299,16 +309,31 @@ class ZeiteintragViewModel(QObject):
         return ergebnis
 
     @staticmethod
+    def _parse_pausenpaar(von_text: str, bis_text: str) -> tuple[time | None, time | None]:
+        """Beide Pausenzeiten oder keine — unvollstaendige Paare gelten als leer."""
+        von = ZeiteintragViewModel._parse_optional_time(von_text)
+        bis = ZeiteintragViewModel._parse_optional_time(bis_text)
+        if von is not None and bis is not None:
+            return von, bis
+        return None, None
+
+    @staticmethod
     def _row_to_dto(row: ZeiteintragRow) -> ZeiteintragsDTO:
+        pause1_von, pause1_bis = ZeiteintragViewModel._parse_pausenpaar(
+            row.pause_beginn, row.pause_ende
+        )
+        pause2_von, pause2_bis = ZeiteintragViewModel._parse_pausenpaar(
+            row.pause2_beginn, row.pause2_ende
+        )
         return ZeiteintragsDTO(
             id=row.id,
             datum=ZeiteintragViewModel._parse_date(row.datum),
             uhrzeit_von=ZeiteintragViewModel._parse_optional_time(row.uhrzeit_von),
             uhrzeit_bis=ZeiteintragViewModel._parse_optional_time(row.uhrzeit_bis),
-            pause_beginn=ZeiteintragViewModel._parse_optional_time(row.pause_beginn),
-            pause_ende=ZeiteintragViewModel._parse_optional_time(row.pause_ende),
-            pause2_beginn=ZeiteintragViewModel._parse_optional_time(row.pause2_beginn),
-            pause2_ende=ZeiteintragViewModel._parse_optional_time(row.pause2_ende),
+            pause_beginn=pause1_von,
+            pause_ende=pause1_bis,
+            pause2_beginn=pause2_von,
+            pause2_ende=pause2_bis,
             anmerkung=row.anmerkung or None,
         )
 

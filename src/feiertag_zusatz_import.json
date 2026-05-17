@@ -1,0 +1,20 @@
+{
+  "zusaetzliche_tage": [
+    {
+      "monat": 12,
+      "tag": 24,
+      "feiertagsname": "Heiligabend",
+      "ist_halber_tag": true,
+      "ist_offiziell": false,
+      "hinweis": "Halber Feiertag, nicht gesetzlich"
+    },
+    {
+      "monat": 12,
+      "tag": 31,
+      "feiertagsname": "Silvester",
+      "ist_halber_tag": true,
+      "ist_offiziell": false,
+      "hinweis": "Halber Feiertag, nicht gesetzlich"
+    }
+  ]
+}

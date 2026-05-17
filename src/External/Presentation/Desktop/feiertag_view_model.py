@@ -23,6 +23,7 @@ class FeiertagViewModel(QObject):
         self._anwendung = anwendung
         self._feiertag_registry = feiertag_registry
         self._table_model = FeiertagTableModel()
+        self._geladenes_jahr: int | None = None
 
     @property
     def table_model(self) -> FeiertagTableModel:
@@ -30,26 +31,35 @@ class FeiertagViewModel(QObject):
 
     def lade_fuer_jahr(self, jahr: int) -> None:
         eintraege = self._anwendung.liste(jahr=jahr)
+        self._geladenes_jahr = jahr
         self._feiertag_registry.aktualisiere_jahr(jahr, eintraege, benachrichtigen=True)
         rows = [
             FeiertagRow(
                 datum=eintrag.datum.strftime("%d.%m.%Y"),
                 feiertagsname=eintrag.feiertagsname,
+                ist_halber_tag=eintrag.ist_halber_tag,
+                ist_offiziell=eintrag.ist_offiziell,
                 hinweis=eintrag.hinweis or "",
             )
             for eintrag in eintraege
         ]
         self._table_model.set_rows(rows)
-        self.status_changed.emit(f"{len(rows)} Feiertag/Freie-Tag-Eintrag/-eintraege geladen.")
+        self.status_changed.emit(f"{len(rows)} Feiertag(e) geladen.")
 
     def lade_aus_api_und_speichere(self, jahr: int) -> None:
         neu, aktualisiert = self._anwendung.lade_aus_api(jahr=jahr)
         self.status_changed.emit(
-            f"{neu} Feiertag(e) neu gespeichert, {aktualisiert} aktualisiert (API)."
+            f"{neu} Feiertag(e) neu gespeichert, {aktualisiert} aktualisiert (Internet-Import)."
         )
         self.lade_fuer_jahr(jahr)
 
-    def fuege_freien_tag_hinzu(self, datum_text: str, bezeichnung: str) -> None:
+    def fuege_feiertag_hinzu(
+        self,
+        datum_text: str,
+        bezeichnung: str,
+        ist_halber_tag: bool,
+        ist_offiziell: bool,
+    ) -> None:
         text_datum = datum_text.strip()
         text_bezeichnung = bezeichnung.strip()
         if not text_datum:
@@ -57,8 +67,38 @@ class FeiertagViewModel(QObject):
         if not text_bezeichnung:
             raise ValueError("Bezeichnung darf nicht leer sein.")
         datum = datetime.strptime(text_datum, "%d.%m.%Y").date()
-        self._anwendung.erfasse(Feiertag(datum=datum, feiertagsname=text_bezeichnung))
-        self.status_changed.emit("Freier Tag gespeichert.")
+        self._anwendung.erfasse(
+            Feiertag(
+                datum=datum,
+                feiertagsname=text_bezeichnung,
+                ist_halber_tag=ist_halber_tag,
+                ist_offiziell=ist_offiziell,
+            )
+        )
+        self.status_changed.emit("Feiertag gespeichert.")
+        if self._geladenes_jahr == datum.year:
+            self.lade_fuer_jahr(datum.year)
+
+    def speichere_zeile(self, row_index: int) -> None:
+        if row_index < 0 or row_index >= len(self._table_model.rows):
+            return
+        row = self._table_model.rows[row_index]
+        datum = datetime.strptime(row.datum.strip(), "%d.%m.%Y").date()
+        self._anwendung.aktualisiere(
+            Feiertag(
+                datum=datum,
+                feiertagsname=row.feiertagsname,
+                hinweis=row.hinweis.strip() or None,
+                ist_halber_tag=row.ist_halber_tag,
+                ist_offiziell=row.ist_offiziell,
+            )
+        )
+        if self._geladenes_jahr is not None:
+            self._feiertag_registry.aktualisiere_jahr(
+                self._geladenes_jahr,
+                self._anwendung.liste(jahr=self._geladenes_jahr),
+                benachrichtigen=True,
+            )
 
     def loesche_nach_datum(self, datum_text: str) -> bool:
         text_datum = datum_text.strip()

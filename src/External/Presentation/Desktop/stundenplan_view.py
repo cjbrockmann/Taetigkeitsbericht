@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QStyle,
     QStyleOptionHeader,
@@ -26,6 +25,7 @@ from External.Presentation.Desktop.stundenplan_table_model import (
     WOCHENTAG_LABELS,
     StundenplanRow,
 )
+from External.Presentation.Desktop.message_boxes import warnung
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
@@ -180,6 +180,9 @@ class StundenplanView(QWidget):
     def has_unsaved_changes(self) -> bool:
         return self._has_unsaved_changes
 
+    def verwerfe_ungespeicherte_aenderungen(self) -> None:
+        self._lade_alle()
+
     def zeilen_fuer_wochentag(self, wochentag: int) -> list[StundenplanRow]:
         return [
             row
@@ -324,7 +327,7 @@ class StundenplanView(QWidget):
         self._lade_alle()
 
     def _show_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Fehler beim Speichern/Laden", message)
+        warnung(self, "Fehler beim Speichern/Laden", message)
 
     def _on_model_mutated(self, *_args) -> None:
         self._aktualisiere_summen_anzeige()

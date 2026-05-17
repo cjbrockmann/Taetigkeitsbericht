@@ -5,8 +5,86 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPointF, Qt
-from PySide6.QtGui import QBrush, QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPointF, Qt, QRect
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPen, QPixmap, QPolygonF
+
+
+class ZeiteintragSpalte:
+    TAG = 0
+    DATUM = 1
+    FEIERTAG_KZ = 2
+    URLAUB = 3
+    KRANK = 4
+    FERIEN = 5
+    BETRIEBSFERIEN = 6
+    VON = 7
+    BIS = 8
+    PAUSE1_VON = 9
+    PAUSE1_BIS = 10
+    PAUSE2_VON = 11
+    PAUSE2_BIS = 12
+    GELEISTET = 13
+    SOLL = 14
+    VERTRAG = 15
+    KOMMENTAR = 16
+    TAG_EXCEL = 17
+    FEIERTAGSNAME = 18
+    SCHULFERIENNAME = 19
+
+    STATUS_KENNZEICHEN = frozenset(
+        {URLAUB, KRANK, FEIERTAG_KZ, FERIEN, BETRIEBSFERIEN}
+    )
+    ZEITFELDER = frozenset({VON, BIS, PAUSE1_VON, PAUSE1_BIS, PAUSE2_VON, PAUSE2_BIS})
+
+    STATUS_SPALTE_BREITE = 28
+    ZEIT_SPALTE_BREITE = 50
+    STATUS_ICON_RAND = 5
+    STATUS_ICON_MAX_GROESSE = 16
+    KOMMENTAR_MIN_BREITE = 420
+    NAME_SPALTE_BREITE = 120
+
+
+_KENNZEICHEN_ICON_CACHE: dict[str, QIcon] = {}
+
+
+def _rundes_kennzeichen_icon(letter: str, hintergrund: str, vordergrund: str = "#ffffff") -> QIcon:
+    groesse = ZeiteintragSpalte.STATUS_ICON_MAX_GROESSE
+    schluessel = f"{letter}:{hintergrund}:{vordergrund}:{groesse}"
+    if schluessel in _KENNZEICHEN_ICON_CACHE:
+        return _KENNZEICHEN_ICON_CACHE[schluessel]
+    pm = QPixmap(groesse, groesse)
+    pm.fill(QColor(0, 0, 0, 0))
+    maler = QPainter(pm)
+    maler.setRenderHint(QPainter.RenderHint.Antialiasing)
+    maler.setBrush(QBrush(QColor(hintergrund)))
+    maler.setPen(Qt.PenStyle.NoPen)
+    maler.drawEllipse(1, 1, groesse - 2, groesse - 2)
+    font = QFont()
+    font.setBold(True)
+    font.setPixelSize(10)
+    maler.setFont(font)
+    maler.setPen(QPen(QColor(vordergrund)))
+    maler.drawText(QRect(0, 0, groesse, groesse), Qt.AlignmentFlag.AlignCenter, letter)
+    maler.end()
+    icon = QIcon(pm)
+    _KENNZEICHEN_ICON_CACHE[schluessel] = icon
+    return icon
+
+
+def urlaub_kennzeichen_icon() -> QIcon:
+    return _rundes_kennzeichen_icon("U", "#2e7d32")
+
+
+def krank_kennzeichen_icon() -> QIcon:
+    return _rundes_kennzeichen_icon("K", "#c62828")
+
+
+def ferien_kennzeichen_icon() -> QIcon:
+    return _rundes_kennzeichen_icon("S", "#1565c0")
+
+
+def betriebsferien_kennzeichen_icon() -> QIcon:
+    return _rundes_kennzeichen_icon("B", "#7b1fa2")
 
 from Core.Domain.models.models_worktime import Feiertag
 from External.Presentation.Desktop.arbeitszeit_berechnung import (
@@ -78,6 +156,11 @@ class ZeiteintragTableModel(QAbstractTableModel):
     HEADERS = [
         "Tag",
         "Datum",
+        "F",
+        "U",
+        "K",
+        "Sz",
+        "Bf",
         "Von",
         "Bis",
         "Von",
@@ -89,17 +172,17 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Vertrag",
         "Kommentar",
         "Tag",
-        "Urlaub",
-        "Krank",
-        "Feiertag",
-        "Ferien",
-        "Betriebsferien",
         "Feiertagsname",
         "Schulferienname",
     ]
     HEADER_TOOLTIPS = [
         "Wird automatisch aus dem Datum ermittelt",
         "Erwartetes Format: DD.MM.YYYY, z. B. 07.05.2026",
+        "Feiertag — Kennzeichen an gesetzlichen Feiertagen",
+        "Urlaub — Kennzeichen, wenn der Tag ein Urlaubstag ist",
+        "Krankheit — Kennzeichen, wenn der Tag ein Krankheitstag ist",
+        "Schulferien — Kennzeichen während Schulferien",
+        "Betriebsferien — Kennzeichen während Betriebsferien",
         "Erwartetes Format: HH:MM, z. B. 08:30",
         "Erwartetes Format: HH:MM, z. B. 17:00",
         "Optionales Format: HH:MM, z. B. 12:00",
@@ -111,11 +194,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Soll nach Vertrag, Format HH:MM",
         "Freitext (max. 80 Zeichen)",
         "Kalendertag als Text fuer Excel (z. B. 7.)",
-        "Tag ist Urlaub",
-        "Tag ist Krankheit",
-        "Tag ist Feiertag",
-        "Tag ist Schulferien",
-        "Tag ist Betriebsferien",
         "Name des Feiertags",
         "Name der Schulferien",
     ]
@@ -172,20 +250,53 @@ class ZeiteintragTableModel(QAbstractTableModel):
         if not index.isValid():
             return None
         row = self._rows[index.row()]
-        if role == Qt.TextAlignmentRole and index.column() in (12, 13, 14, 15, 16, 17):
+        col = index.column()
+        if role == Qt.TextAlignmentRole and col in ZeiteintragSpalte.STATUS_KENNZEICHEN | {
+            ZeiteintragSpalte.TAG_EXCEL
+        }:
             return int(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         if role == Qt.BackgroundRole:
             if self._is_weekend_date(row.datum):
                 return QColor("#eeeeee")
             return QColor("#ffffff")
-        if role == Qt.DecorationRole and index.column() == 0:
-            if self._feiertag_fuer_datumtext(row.datum) is not None:
+        if role == Qt.DecorationRole:
+            if col == ZeiteintragSpalte.TAG:
+                if self._feiertag_fuer_datumtext(row.datum) is not None:
+                    return feiertag_stern_icon()
+                return None
+            if col == ZeiteintragSpalte.URLAUB and row.ist_urlaub:
+                return urlaub_kennzeichen_icon()
+            if col == ZeiteintragSpalte.KRANK and row.ist_krank:
+                return krank_kennzeichen_icon()
+            if col == ZeiteintragSpalte.FEIERTAG_KZ and row.ist_feiertag:
                 return feiertag_stern_icon()
+            if col == ZeiteintragSpalte.FERIEN and row.ist_ferien:
+                return ferien_kennzeichen_icon()
+            if col == ZeiteintragSpalte.BETRIEBSFERIEN and row.ist_betriebsferien:
+                return betriebsferien_kennzeichen_icon()
             return None
         if role == Qt.ToolTipRole:
-            if index.column() == 10:
-                return self.HEADER_TOOLTIPS[10]
-            if index.column() in (0, 1):
+            if col == ZeiteintragSpalte.VERTRAG:
+                return self.HEADER_TOOLTIPS[ZeiteintragSpalte.VERTRAG]
+            if col in ZeiteintragSpalte.STATUS_KENNZEICHEN:
+                if not self._kennzeichen_icon_aktiv(row, col):
+                    return None
+                if col == ZeiteintragSpalte.FEIERTAG_KZ:
+                    name = row.feiertagsname.strip()
+                    feiertag = self._feiertag_fuer_datumtext(row.datum)
+                    if not name and feiertag is not None:
+                        name = feiertag.feiertagsname.strip()
+                    if not name:
+                        return None
+                    tooltip = name
+                    if feiertag is not None and feiertag.hinweis:
+                        tooltip = f"{tooltip}\n{feiertag.hinweis}"
+                    return tooltip
+                if col == ZeiteintragSpalte.FERIEN:
+                    name = row.schulferienname.strip()
+                    return name or None
+                return self.HEADER_TOOLTIPS[col]
+            if col in (ZeiteintragSpalte.TAG, ZeiteintragSpalte.DATUM):
                 feiertag = self._feiertag_fuer_datumtext(row.datum)
                 if feiertag is None:
                     return None
@@ -200,46 +311,38 @@ class ZeiteintragTableModel(QAbstractTableModel):
             return QColor(NORMAL_ROW_TEXT_COLOR)
         if role not in (Qt.DisplayRole, Qt.EditRole):
             return None
-        match index.column():
-            case 0:
+        if col in ZeiteintragSpalte.STATUS_KENNZEICHEN:
+            return ""
+        match col:
+            case ZeiteintragSpalte.TAG:
                 return self._weekday_from_date(row.datum)
-            case 1:
+            case ZeiteintragSpalte.DATUM:
                 return row.datum
-            case 2:
+            case ZeiteintragSpalte.VON:
                 return row.uhrzeit_von
-            case 3:
+            case ZeiteintragSpalte.BIS:
                 return row.uhrzeit_bis
-            case 4:
+            case ZeiteintragSpalte.PAUSE1_VON:
                 return row.pause_beginn
-            case 5:
+            case ZeiteintragSpalte.PAUSE1_BIS:
                 return row.pause_ende
-            case 6:
+            case ZeiteintragSpalte.PAUSE2_VON:
                 return row.pause2_beginn
-            case 7:
+            case ZeiteintragSpalte.PAUSE2_BIS:
                 return row.pause2_ende
-            case 8:
+            case ZeiteintragSpalte.GELEISTET:
                 return row.geleistete_stunden
-            case 9:
+            case ZeiteintragSpalte.SOLL:
                 return row.soll_stunden_nach_stundenplan
-            case 10:
+            case ZeiteintragSpalte.VERTRAG:
                 return row.soll_stunden_nach_vertrag
-            case 11:
+            case ZeiteintragSpalte.KOMMENTAR:
                 return row.anmerkung
-            case 12:
+            case ZeiteintragSpalte.TAG_EXCEL:
                 return self._kalendertag_mit_punkt_fuer_excel(row.datum)
-            case 13:
-                return "✓" if row.ist_urlaub else ""
-            case 14:
-                return "✓" if row.ist_krank else ""
-            case 15:
-                return "✓" if row.ist_feiertag else ""
-            case 16:
-                return "✓" if row.ist_ferien else ""
-            case 17:
-                return "✓" if row.ist_betriebsferien else ""
-            case 18:
+            case ZeiteintragSpalte.FEIERTAGSNAME:
                 return row.feiertagsname
-            case 19:
+            case ZeiteintragSpalte.SCHULFERIENNAME:
                 return row.schulferienname
             case _:
                 return None
@@ -250,32 +353,43 @@ class ZeiteintragTableModel(QAbstractTableModel):
 
         row = self._rows[index.row()]
         text = str(value)
-        if index.column() != 11:
+        col = index.column()
+        if col != ZeiteintragSpalte.KOMMENTAR:
             text = text.strip()
-        if index.column() == 0:
+        if col == ZeiteintragSpalte.TAG:
             return False
-        elif index.column() == 1:
+        elif col == ZeiteintragSpalte.DATUM:
             row.datum = text
-        elif index.column() == 2:
+        elif col == ZeiteintragSpalte.VON:
             row.uhrzeit_von = text
-        elif index.column() == 3:
+        elif col == ZeiteintragSpalte.BIS:
             row.uhrzeit_bis = text
-        elif index.column() == 4:
+        elif col == ZeiteintragSpalte.PAUSE1_VON:
             row.pause_beginn = text
-        elif index.column() == 5:
+        elif col == ZeiteintragSpalte.PAUSE1_BIS:
             row.pause_ende = text
-        elif index.column() == 6:
+        elif col == ZeiteintragSpalte.PAUSE2_VON:
             row.pause2_beginn = text
-        elif index.column() == 7:
+        elif col == ZeiteintragSpalte.PAUSE2_BIS:
             row.pause2_ende = text
-        elif index.column() in (8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19):
+        elif col in (
+            ZeiteintragSpalte.STATUS_KENNZEICHEN
+            | {
+                ZeiteintragSpalte.GELEISTET,
+                ZeiteintragSpalte.SOLL,
+                ZeiteintragSpalte.VERTRAG,
+                ZeiteintragSpalte.TAG_EXCEL,
+                ZeiteintragSpalte.FEIERTAGSNAME,
+                ZeiteintragSpalte.SCHULFERIENNAME,
+            }
+        ):
             return False
-        elif index.column() == 11:
+        elif col == ZeiteintragSpalte.KOMMENTAR:
             row.anmerkung = text
         else:
             return False
 
-        if index.column() == 1:
+        if col == ZeiteintragSpalte.DATUM:
             left = self.index(index.row(), 0)
             right = self.index(index.row(), len(self.HEADERS) - 1)
             self.dataChanged.emit(
@@ -291,14 +405,14 @@ class ZeiteintragTableModel(QAbstractTableModel):
             )
             self.headerDataChanged.emit(Qt.Vertical, index.row(), index.row())
             if self._rows:
-                v0 = self.index(0, 10)
-                v1 = self.index(len(self._rows) - 1, 10)
+                v0 = self.index(0, ZeiteintragSpalte.VERTRAG)
+                v1 = self.index(len(self._rows) - 1, ZeiteintragSpalte.VERTRAG)
                 self.dataChanged.emit(v0, v1, [Qt.DisplayRole, Qt.EditRole])
             return True
 
-        if index.column() in (2, 3, 4, 5, 6, 7):
-            left = self.index(index.row(), index.column())
-            right = self.index(index.row(), 9)
+        if col in ZeiteintragSpalte.ZEITFELDER:
+            left = self.index(index.row(), col)
+            right = self.index(index.row(), ZeiteintragSpalte.SOLL)
             self.dataChanged.emit(
                 left, right, [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole]
             )
@@ -312,7 +426,19 @@ class ZeiteintragTableModel(QAbstractTableModel):
     def flags(self, index: QModelIndex) -> Qt.ItemFlags:
         if not index.isValid():
             return Qt.ItemIsEnabled
-        if index.column() in (0, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19):
+        col = index.column()
+        if col in (
+            {ZeiteintragSpalte.TAG}
+            | ZeiteintragSpalte.STATUS_KENNZEICHEN
+            | {
+                ZeiteintragSpalte.GELEISTET,
+                ZeiteintragSpalte.SOLL,
+                ZeiteintragSpalte.VERTRAG,
+                ZeiteintragSpalte.TAG_EXCEL,
+                ZeiteintragSpalte.FEIERTAGSNAME,
+                ZeiteintragSpalte.SCHULFERIENNAME,
+            }
+        ):
             return Qt.ItemIsSelectable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
 
@@ -342,7 +468,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         if not self._rows:
             return
         for r in range(len(self._rows)):
-            idx = self.index(r, 9)
+            idx = self.index(r, ZeiteintragSpalte.SOLL)
             self.dataChanged.emit(idx, idx, [Qt.DisplayRole])
 
     def feiertag_darstellung_aktualisieren(self) -> None:
@@ -442,6 +568,23 @@ class ZeiteintragTableModel(QAbstractTableModel):
         except ValueError:
             return None
         return f"{datum.day}."
+
+    @staticmethod
+    def _kennzeichen_icon_aktiv(row: ZeiteintragRow, col: int) -> bool:
+        """True genau dann, wenn in der Zelle ein Status-Icon gezeichnet wird."""
+        match col:
+            case ZeiteintragSpalte.URLAUB:
+                return row.ist_urlaub
+            case ZeiteintragSpalte.KRANK:
+                return row.ist_krank
+            case ZeiteintragSpalte.FEIERTAG_KZ:
+                return row.ist_feiertag
+            case ZeiteintragSpalte.FERIEN:
+                return row.ist_ferien
+            case ZeiteintragSpalte.BETRIEBSFERIEN:
+                return row.ist_betriebsferien
+            case _:
+                return False
 
     def _feiertag_fuer_datumtext(self, datum_text: str) -> Feiertag | None:
         text = datum_text.strip()

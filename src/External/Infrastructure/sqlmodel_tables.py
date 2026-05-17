@@ -41,6 +41,8 @@ class FeiertagTable(SQLModel, table=True):
     datum: date = Field(primary_key=True)
     feiertagsname: str = Field(max_length=80)
     hinweis: Optional[str] = Field(default=None, max_length=80)
+    ist_halber_tag: bool = Field(default=False)
+    ist_offiziell: bool = Field(default=True)
 
 
 class UrlaubsantragTable(SQLModel, table=True):

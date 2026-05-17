@@ -8,17 +8,16 @@ import tomllib
 
 DEFAULT_ZEITEINTRAG_EXCEL_CELL_SPEC: tuple[int | None, ...] = (
     0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
+    17,
     7,
-    None,
-    None,
+    8,
+    9,
+    10,
     11,
     12,
+    None,
+    None,
+    16,
 )
 
 
@@ -77,7 +76,7 @@ def _parse_cell_spec(raw: Any) -> tuple[int | None, ...]:
     return tuple(out)
 
 
-ZEITEINTRAG_SPALTEN_MAX: Final[int] = 12
+ZEITEINTRAG_SPALTEN_MAX: Final[int] = 19
 STUNDENPLAN_SPALTEN_MAX: Final[int] = 8
 
 

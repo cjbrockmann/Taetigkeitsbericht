@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, QModelIndex, Qt
 from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QDateEdit,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QTableView,
@@ -19,7 +20,11 @@ from PySide6.QtWidgets import (
 )
 
 from External.Presentation.Desktop.feiertag_view_model import FeiertagViewModel
-from External.Presentation.Desktop.table_view_styles import STANDARD_TABLE_VIEW_STYLESHEET
+from External.Presentation.Desktop.message_boxes import warnung
+from External.Presentation.Desktop.table_view_styles import (
+    FeiertagItemDelegate,
+    STANDARD_TABLE_VIEW_STYLESHEET,
+)
 
 
 class FeiertagView(QWidget):
@@ -47,7 +52,7 @@ class FeiertagView(QWidget):
         self._jahr_spin.setValue(date.today().year)
         self._jahr_spin.setPrefix("Jahr: ")
         self._laden_button = QPushButton("Laden", self)
-        self._import_button = QPushButton("Import von Google starten", self)
+        self._import_button = QPushButton("Aus Internet importieren", self)
 
         toolbar_layout.addWidget(self._jahr_spin)
         toolbar_layout.addWidget(self._laden_button)
@@ -58,12 +63,17 @@ class FeiertagView(QWidget):
         self._datum_input.setDisplayFormat("dd.MM.yyyy")
         self._datum_input.setDate(QDate.currentDate())
         self._bezeichnung_input = QLineEdit(self)
-        self._bezeichnung_input.setPlaceholderText("Bezeichnung freier Tag")
-        self._hinzufuegen_button = QPushButton("Freien Tag hinzufuegen", self)
+        self._bezeichnung_input.setPlaceholderText("Bezeichnung Feiertag")
+        self._halber_tag_check = QCheckBox("Halber Feiertag", self)
+        self._offiziell_check = QCheckBox("Offiziell (gesetzlich)", self)
+        self._offiziell_check.setChecked(True)
+        self._hinzufuegen_button = QPushButton("Feiertag hinzufügen", self)
         self._loeschen_button = QPushButton("Markierten Tag loeschen", self)
 
         add_layout.addWidget(self._datum_input)
         add_layout.addWidget(self._bezeichnung_input)
+        add_layout.addWidget(self._halber_tag_check)
+        add_layout.addWidget(self._offiziell_check)
         add_layout.addWidget(self._hinzufuegen_button)
         add_layout.addWidget(self._loeschen_button)
 
@@ -73,11 +83,14 @@ class FeiertagView(QWidget):
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
         self._table.setStyleSheet(STANDARD_TABLE_VIEW_STYLESHEET)
+        self._table.setItemDelegate(FeiertagItemDelegate(self._table))
         header = self._table.horizontalHeader()
         header.setStretchLastSection(False)
         header.resizeSection(0, 95)
-        header.resizeSection(1, 260)
-        header.setStretchLastSection(True)
+        header.resizeSection(1, 220)
+        header.resizeSection(2, 72)
+        header.resizeSection(3, 80)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self._table.verticalHeader().setVisible(True)
 
         self._status_label = QLabel("Bereit.", self)
@@ -92,10 +105,19 @@ class FeiertagView(QWidget):
         self._hinzufuegen_button.clicked.connect(self._on_hinzufuegen)
         self._loeschen_button.clicked.connect(self._on_loeschen)
         self._jahr_spin.valueChanged.connect(self._on_jahr_changed)
+        self._view_model.table_model.dataChanged.connect(self._on_table_data_changed)
 
     def _bind_view_model(self) -> None:
         self._view_model.status_changed.connect(self._status_label.setText)
         self._view_model.error_occurred.connect(self._show_error)
+
+    @property
+    def has_unsaved_changes(self) -> bool:
+        return bool(self._bezeichnung_input.text().strip())
+
+    def verwerfe_ungespeicherte_aenderungen(self) -> None:
+        self._bezeichnung_input.clear()
+        self._lade_auswahl_jahr()
 
     def _lade_auswahl_jahr(self) -> None:
         self._view_model.lade_fuer_jahr(self._jahr_spin.value())
@@ -111,13 +133,29 @@ class FeiertagView(QWidget):
 
     def _on_hinzufuegen(self) -> None:
         try:
-            self._view_model.fuege_freien_tag_hinzu(
+            self._view_model.fuege_feiertag_hinzu(
                 datum_text=self._datum_input.date().toString("dd.MM.yyyy"),
                 bezeichnung=self._bezeichnung_input.text(),
+                ist_halber_tag=self._halber_tag_check.isChecked(),
+                ist_offiziell=self._offiziell_check.isChecked(),
             )
-            self._lade_auswahl_jahr()
         except Exception as exc:  # noqa: BLE001
             self._show_error(str(exc))
+
+    def _on_table_data_changed(
+        self, top_left: QModelIndex, bottom_right: QModelIndex, roles: list[int]
+    ) -> None:
+        if not roles or Qt.ItemDataRole.EditRole not in roles:
+            return
+        if top_left.column() not in (2, 3):
+            return
+        try:
+            for row_index in range(top_left.row(), bottom_right.row() + 1):
+                self._view_model.speichere_zeile(row_index)
+            self._view_model.status_changed.emit("Feiertag aktualisiert.")
+        except Exception as exc:  # noqa: BLE001
+            self._show_error(str(exc))
+            self._lade_auswahl_jahr()
 
     def _on_loeschen(self) -> None:
         selection_model = self._table.selectionModel()
@@ -136,4 +174,4 @@ class FeiertagView(QWidget):
             self._show_error(str(exc))
 
     def _show_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Feiertag-Fehler", message)
+        warnung(self, "Feiertag-Fehler", message)

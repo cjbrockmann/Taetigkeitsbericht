@@ -15,6 +15,8 @@ def _row_to_domain(row: FeiertagTable) -> Feiertag:
         datum=row.datum,
         feiertagsname=row.feiertagsname,
         hinweis=row.hinweis,
+        ist_halber_tag=row.ist_halber_tag,
+        ist_offiziell=row.ist_offiziell,
     )
 
 
@@ -27,6 +29,8 @@ class SqlFeiertagRepository:
             datum=eintrag.datum,
             feiertagsname=eintrag.feiertagsname,
             hinweis=eintrag.hinweis,
+            ist_halber_tag=eintrag.ist_halber_tag,
+            ist_offiziell=eintrag.ist_offiziell,
         )
         self._session.add(row)
         self._session.commit()
@@ -39,6 +43,8 @@ class SqlFeiertagRepository:
             return False
         row.feiertagsname = eintrag.feiertagsname
         row.hinweis = eintrag.hinweis
+        row.ist_halber_tag = eintrag.ist_halber_tag
+        row.ist_offiziell = eintrag.ist_offiziell
         self._session.add(row)
         self._session.commit()
         self._session.refresh(row)

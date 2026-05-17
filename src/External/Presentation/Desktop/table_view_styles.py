@@ -54,3 +54,14 @@ class DirtyRowItemDelegate(QStyledItemDelegate):
             paint_option_mit_zeilenfarbe(option, is_dirty),
             index,
         )
+
+
+class FeiertagItemDelegate(QStyledItemDelegate):
+    """Feiertag-Tabelle: markierte Zeilen immer schwarze Schrift, Hintergrund unveraendert."""
+
+    def paint(self, painter, option, index):  # noqa: N802
+        super().paint(
+            painter,
+            paint_option_mit_zeilenfarbe(option, is_dirty=False),
+            index,
+        )

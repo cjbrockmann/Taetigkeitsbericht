@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QDoubleSpinBox,
     QPushButton,
     QSizePolicy,
@@ -25,7 +24,11 @@ from PySide6.QtWidgets import (
 )
 
 from App.app_config import AppConfig
-from External.Presentation.Desktop.form_bearbeitung_dirty import dirty_indices_bei_form_bearbeitung
+from External.Presentation.Desktop.message_boxes import frage_ja_nein, warnung
+from External.Presentation.Desktop.form_bearbeitung_dirty import (
+    dirty_indices_bei_form_bearbeitung,
+    hat_ungespeicherte_formular_aenderungen,
+)
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
     STANDARD_TABLE_VIEW_STYLESHEET,
@@ -50,9 +53,11 @@ class UrlaubsantragView(QWidget):
         )
         self._initial_load_done = False
         self._bearbeitungs_id: int | None = None
+        self._neuanlage_form_snapshot: tuple[str, str, str, str, str] = ()
         self._suspend_selection_sync = False
         self._build_ui()
         self._bind_view_model()
+        self._reset_formular_defaults()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -282,6 +287,31 @@ class UrlaubsantragView(QWidget):
             )
         )
 
+    def _form_state_snapshot(self) -> tuple[str, str, str, str, str]:
+        genehmigt = "ja" if self._genehmigt_check.isChecked() else "nein"
+        return (
+            self._datum_von_input.date().toString("dd.MM.yyyy"),
+            self._datum_bis_input.date().toString("dd.MM.yyyy"),
+            self._urlaubstyp_input.currentText().strip(),
+            str(self._urlaubstage_spin.value()),
+            genehmigt,
+        )
+
+    def _neuanlage_formular_abweichend(self) -> bool:
+        return self._form_state_snapshot() != self._neuanlage_form_snapshot
+
+    @property
+    def has_unsaved_changes(self) -> bool:
+        model = self._view_model.table_model
+        return hat_ungespeicherte_formular_aenderungen(
+            dirty_rows=model._dirty_rows,
+            bearbeitungs_id=self._bearbeitungs_id,
+            neuanlage_formular_abweichend=self._neuanlage_formular_abweichend(),
+        )
+
+    def verwerfe_ungespeicherte_aenderungen(self) -> None:
+        self._lade_auswahl_jahr()
+
     def _bind_view_model(self) -> None:
         self._view_model.status_changed.connect(self._status_label.setText)
         self._view_model.error_occurred.connect(self._show_error)
@@ -360,6 +390,7 @@ class UrlaubsantragView(QWidget):
         self._urlaubstage_aus_datum_vorbelegen()
         self._urlaubstyp_input.setCurrentText(self._STANDARD_URLAUBSTYP)
         self._genehmigt_check.setChecked(False)
+        self._neuanlage_form_snapshot = self._form_state_snapshot()
 
     def _zeile_ins_formular(self, row: UrlaubsantragRow) -> None:
         dv = datetime.strptime(row.datum_von, "%d.%m.%Y").date()
@@ -452,14 +483,11 @@ class UrlaubsantragView(QWidget):
                 "Dieser Eintrag kann nicht geloescht werden (fehlende Datensatz-Id)."
             )
             return
-        antwort = QMessageBox.question(
+        if not frage_ja_nein(
             self,
             "Urlaubsantrag loeschen",
             f"Urlaubsantrag vom {row.datum_von} bis {row.datum_bis} endgueltig loeschen?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if antwort != QMessageBox.StandardButton.Yes:
+        ):
             return
         try:
             if self._view_model.loesche_nach_id(row.id):
@@ -468,4 +496,4 @@ class UrlaubsantragView(QWidget):
             self._show_error(str(exc))
 
     def _show_error(self, message: str) -> None:
-        QMessageBox.warning(self, "Urlaubsantrag", message)
+        warnung(self, "Urlaubsantrag", message)

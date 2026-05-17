@@ -26,14 +26,21 @@ Tabelle Stundenplan (name=tblStundenplan)
 - Unterbrechung_Ende: Time
 - Anmerkung: String(80)
 
-Tabelle "Feiertage" (name=tblFeiertage)
+Tabelle `feiertag` (GUI-Tab „Feiertage“)
 
-- Datum: Date
-- Feiertagname: String(80)
+- Datum: Date (PK)
+- Feiertagsname: String(80)
+- Hinweis: String(80), optional
+- ist_halber_tag: bool (Standard: ganzer Tag)
+- ist_offiziell: bool (Standard bei API-Import: gesetzlich)
+
+Internet-Import (`Aus Internet importieren`): Feiertage von feiertage-api.de als **ganze, offizielle** Tage; zusätzlich Einträge aus `src/feiertag_zusatz_import.json` (z. B. 24.12. und 31.12. als halbe, nicht offizielle Tage). Konfiguration: `src/external_api.toml` → `feiertage_api.zusatz_import_datei`.
 
 ## Sollstunden in der Zeiterfassung
 
 Die Sollwerte, Tages-Flags (Urlaub, Feiertag, …) und Kommentarregeln werden in der Anwendungsschicht (`ZeiteintragAnwendungDTO` in `src/Core/Application/zeiteintrag_anwendung.py`) berechnet und als `ZeiteintragsDTO` an die Desktop-Tabelle übergeben. Die GUI mappt DTOs auf Tabellenzeilen und zeigt sie an; bei Datumsänderungen ruft das ViewModel `anreichere_eintraege_fuer_tag` erneut auf.
+
+**Tabellenlayout (Zeiteinträge):** Direkt nach Datum stehen fünf schmale Kennzeichen-Spalten (Feiertag, Urlaub, Krank, Schulferien, Betriebsferien) mit Icons statt Häkchen; danach Von/Bis/Pausen, Geleistet, Soll, Vertrag und Kommentar. Spaltenindices und Excel-Export (`cell_spec`) sind in `src/config.toml` dokumentiert.
 
 ### Sollstunden nach Vertrag
 
