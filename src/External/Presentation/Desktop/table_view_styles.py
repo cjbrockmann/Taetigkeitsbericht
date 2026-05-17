@@ -11,6 +11,9 @@ NORMAL_ROW_TEXT_COLOR = "#000000"
 # Kein erzwungenes color bei :selected, damit Delegate/Modell die Schriftfarbe setzen koennen
 # (ungespeicherte Zeilen rot, auch wenn markiert).
 STANDARD_TABLE_VIEW_STYLESHEET = (
+    "QTableView QHeaderView::section {"
+    "font-weight: bold;"
+    "}"
     "QTableView::item:hover:!selected {"
     "background-color: #ececec;"
     "}"

@@ -361,6 +361,20 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
     def _ist_krank_oder_urlaub_tag(self, eintrag: ZeiteintragsDTO) -> bool:
         return eintrag.ist_krank or eintrag.ist_urlaub
 
+    def _eintrag_hat_geleistete_arbeitszeit(self, eintrag: ZeiteintragsDTO) -> bool:
+        if eintrag.uhrzeit_von is None or eintrag.uhrzeit_bis is None:
+            return False
+        if eintrag.uhrzeit_von >= eintrag.uhrzeit_bis:
+            return False
+        return self._netto_arbeitssekunden(eintrag) > 0
+
+    def _tag_hat_geleistete_arbeitszeit(self, eintraege: list[ZeiteintragsDTO]) -> bool:
+        return any(self._eintrag_hat_geleistete_arbeitszeit(e) for e in eintraege)
+
+    def _setze_soll_stundenplan_wie_vertrag(self, eintraege: list[ZeiteintragsDTO]) -> None:
+        for eintrag in eintraege:
+            eintrag.soll_stunden_nach_Stundenplan = eintrag.soll_stunden_nach_vertrag
+
     def _berechne_soll_stunden_nach_vertrag(self, datum: date) -> time | None:
         """Soll-Arbeitszeit nach Vertrag: config.toml ([sollstunden].wochenstunden), je Wochentag."""
         if not self._sollstunden_an_feiertagen and any(
@@ -422,28 +436,86 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
 
         return eintrag
 
-    def _berechne_geleistete_stunden(
-        self, eintrag: ZeiteintragsDTO, *, zeile_nr: int
+    def _berechne_geleistete_stunden_aus_zeiten(
+        self, eintrag: ZeiteintragsDTO
     ) -> time | None:
-        """Geleistete Stunden: Krank/Urlaub (Zeile 1) = Soll Vertrag, sonst aus Von/Bis."""
-        if zeile_nr == 1 and self._ist_krank_oder_urlaub_tag(eintrag):
-            return self._berechne_soll_stunden_nach_vertrag(eintrag.datum)
-        if eintrag.uhrzeit_von is not None and eintrag.uhrzeit_bis is not None:
-            return self._sekunden_als_uhrzeit_fuer_dauer(
-                self._netto_arbeitssekunden(eintrag)
-            )
-        return None
+        if not self._eintrag_hat_geleistete_arbeitszeit(eintrag):
+            return None
+        return self._sekunden_als_uhrzeit_fuer_dauer(
+            self._netto_arbeitssekunden(eintrag)
+        )
+
+    def _summe_arbeitssekunden_am_tag(self, eintraege: list[ZeiteintragsDTO]) -> int:
+        return sum(
+            self._netto_arbeitssekunden(e)
+            for e in eintraege
+            if self._eintrag_hat_geleistete_arbeitszeit(e)
+        )
+
+    def _berechne_geleistete_stunden_zeile_1_urlaub(
+        self,
+        eintraege: list[ZeiteintragsDTO],
+        *,
+        hat_arbeit: bool,
+        vertrag_soll: time | None,
+    ) -> time | None:
+        """Urlaub Zeile 1: Vertrags-Soll, bei Arbeit zusaetzlich alle Arbeitszeiten des Tages."""
+        if not hat_arbeit:
+            return vertrag_soll
+        vertrag_sek = (
+            self._sekunden_seit_mitternacht(vertrag_soll) if vertrag_soll is not None else 0
+        )
+        gesamt_sek = vertrag_sek + self._summe_arbeitssekunden_am_tag(eintraege)
+        if gesamt_sek <= 0:
+            return None
+        return self._sekunden_als_uhrzeit_fuer_dauer(gesamt_sek)
+
+    def _berechne_geleistete_stunden_zeile_1_krank(
+        self,
+        eintrag: ZeiteintragsDTO,
+        *,
+        hat_arbeit_am_tag: bool,
+        vertrag_soll: time | None,
+    ) -> time | None:
+        """Krank Zeile 1: nur eigene Arbeitszeit, sonst Vertrags-Soll."""
+        if hat_arbeit_am_tag and self._eintrag_hat_geleistete_arbeitszeit(eintrag):
+            return self._berechne_geleistete_stunden_aus_zeiten(eintrag)
+        if not hat_arbeit_am_tag:
+            return vertrag_soll
+        return vertrag_soll
 
     def _aktualisiere_geleistete_stunden_fuer_tag(
         self, eintraege: list[ZeiteintragsDTO]
     ) -> None:
+        if not eintraege:
+            return
+        ist_urlaub = eintraege[0].ist_urlaub
+        ist_krank = eintraege[0].ist_krank
+        hat_arbeit = self._tag_hat_geleistete_arbeitszeit(eintraege)
+        vertrag_soll = None
+        if ist_urlaub or ist_krank:
+            vertrag_soll = self._berechne_soll_stunden_nach_vertrag(eintraege[0].datum)
         for zeile_nr, eintrag in enumerate(eintraege, start=1):
-            eintrag.geleistete_stunden = self._berechne_geleistete_stunden(
-                eintrag, zeile_nr=zeile_nr
-            )
+            # Krank vor Urlaub: bei beiden gilt die Krankheitslogik (Urlaub wird gutgeschrieben).
+            if ist_krank and zeile_nr == 1:
+                eintrag.geleistete_stunden = self._berechne_geleistete_stunden_zeile_1_krank(
+                    eintrag,
+                    hat_arbeit_am_tag=hat_arbeit,
+                    vertrag_soll=vertrag_soll,
+                )
+            elif ist_urlaub and zeile_nr == 1:
+                eintrag.geleistete_stunden = self._berechne_geleistete_stunden_zeile_1_urlaub(
+                    eintraege,
+                    hat_arbeit=hat_arbeit,
+                    vertrag_soll=vertrag_soll,
+                )
+            else:
+                eintrag.geleistete_stunden = self._berechne_geleistete_stunden_aus_zeiten(
+                    eintrag
+                )
 
     def _setze_soll_felder_fuer_tag(self, eintraege: list[ZeiteintragsDTO]) -> None:
-        """Vertrag-Soll Zeile 1 (bei Krank/Urlaub dort Vertrags-Soll); Stundenplan-Soll wie Werktag."""
+        """Vertrag-Soll Zeile 1; bei Krank/Urlaub Stundenplan-Soll = Vertrag-Soll ohne Arbeitszeit."""
         if not eintraege:
             return
         if self._ist_krank_oder_urlaub_tag(eintraege[0]):
@@ -453,7 +525,10 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
                     eintrag.soll_stunden_nach_vertrag = vertrag_soll
                 else:
                     eintrag.soll_stunden_nach_vertrag = None
-            self._verteile_soll_stunden_nach_stundenplan(eintraege)
+            if self._tag_hat_geleistete_arbeitszeit(eintraege):
+                self._verteile_soll_stunden_nach_stundenplan(eintraege)
+            else:
+                self._setze_soll_stundenplan_wie_vertrag(eintraege)
             return
         for i, eintrag in enumerate(eintraege):
             if i == 0:

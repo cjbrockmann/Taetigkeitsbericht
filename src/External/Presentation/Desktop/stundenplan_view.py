@@ -108,6 +108,9 @@ class GruppenHeaderView(QHeaderView):
             ("Pause 2", 5, 6),
         ]
         self.setDefaultAlignment(Qt.AlignCenter)
+        kopf_schrift = self.font()
+        kopf_schrift.setBold(True)
+        self.setFont(kopf_schrift)
 
     def sectionSizeFromContents(self, logical_index: int) -> QSize:  # noqa: N802
         groesse = super().sectionSizeFromContents(logical_index)
