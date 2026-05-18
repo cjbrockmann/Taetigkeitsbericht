@@ -136,6 +136,10 @@ Dann spätestens muss man sich vorher einloggen und ein Token für die Abgabe er
 
 Die Persistenz erfolgt über SQLite. Die Anbindung geschieht über ein ORM (SQLModel auf Basis von SQLAlchemy); per Dependency Injection und Repository-Pattern bleiben die Aufrufer von der konkreten Speicherung entkoppelt. 
 
+## Tests
+
+Automatisierte Tests (pytest, In-Memory-SQLite, Schichten unter `test/`): siehe [test/README_tests.md](./test/README_tests.md).
+
 ## Python Setup
 
 Empfohlen ist eine lokale virtuelle Umgebung (`venv`), damit Abhaengigkeiten isoliert sind.
@@ -147,6 +151,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 Zum Verlassen der Umgebung:
@@ -155,6 +160,8 @@ Zum Verlassen der Umgebung:
 deactivate
 ```
 
+Tests ausführen: `python -m pytest test/` — siehe [test/README_tests.md](./test/README_tests.md).
+
 ### Windows (PowerShell)
 
 ```powershell
@@ -162,6 +169,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 Zum Verlassen der Umgebung:
@@ -169,6 +177,8 @@ Zum Verlassen der Umgebung:
 ```powershell
 deactivate
 ```
+
+Tests ausführen (nach Aktivierung der venv): `py -m pytest test/` — Details in [test/README_tests.md](./test/README_tests.md).
 
 ### Bemerkung zum Setup
 
