@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import text
 from sqlmodel import SQLModel, create_engine
 
 
-def create_sqlite_engine(database_url: str = "sqlite:///taetigkeitsbericht.db"):
+def default_sqlite_database_url() -> str:
+    src_root = Path(__file__).resolve().parents[2]
+    database_path = src_root / "taetigkeitsbericht.db"
+    return f"sqlite:///{database_path.as_posix()}"
+
+
+def create_sqlite_engine(database_url: str | None = None):
+    if database_url is None:
+        database_url = default_sqlite_database_url()
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     return create_engine(database_url, connect_args=connect_args)
 

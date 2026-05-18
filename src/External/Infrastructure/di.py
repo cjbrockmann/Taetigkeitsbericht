@@ -24,7 +24,7 @@ from External.Infrastructure.repositories.zeiteintrag_sqlmodel_repository import
 
 @dataclass(frozen=True)
 class InfrastructureConfig:
-    database_url: str = "sqlite:///taetigkeitsbericht.db"
+    database_url: str | None = None
 
 
 class InfrastructureDIModule(Module):

@@ -24,7 +24,7 @@ from External.Presentation.Desktop.di import DesktopPresentationDIModule
 
 
 def create_injector(
-    database_url: str = "sqlite:///taetigkeitsbericht.db",
+    database_url: str | None = None,
     app_config: AppConfig | None = None,
 ) -> Injector:
     if app_config is None:
