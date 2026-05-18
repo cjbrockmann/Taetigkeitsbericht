@@ -36,7 +36,7 @@ def test_liste_im_monat_fuellt_leere_tage():
     app = dto_anwendung(
         zeiteintraege=[zeiteintrag(datum=date(2025, 3, 5))],
     )
-    liste = app.liste_im_monat(2025, 3)
+    liste = app.liste_im_monat(1, 2025, 3)
     assert len(liste) == 31
     mit_inhalt = [e for e in liste if e.uhrzeit_von is not None]
     assert len(mit_inhalt) == 1

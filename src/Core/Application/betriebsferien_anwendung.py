@@ -13,11 +13,11 @@ class BetriebsferienAnwendung:
     def erfasse(self, eintrag: Betriebsferien) -> Betriebsferien:
         return self._service.erfasse_betriebsferien(eintrag)
 
-    def hole(self, eintrag_id: int) -> Optional[Betriebsferien]:
-        return self._service.hole_betriebsferien(eintrag_id)
+    def hole(self, mandant_id: int, eintrag_id: int) -> Optional[Betriebsferien]:
+        return self._service.hole_betriebsferien(mandant_id, eintrag_id)
 
-    def liste(self, jahr: Optional[int] = None) -> list[Betriebsferien]:
-        return self._service.liste_betriebsferien(jahr=jahr)
+    def liste(self, mandant_id: int, jahr: Optional[int] = None) -> list[Betriebsferien]:
+        return self._service.liste_betriebsferien(mandant_id, jahr=jahr)
 
-    def loesche(self, eintrag_id: int) -> bool:
-        return self._service.loesche_betriebsferien(eintrag_id)
+    def loesche(self, mandant_id: int, eintrag_id: int) -> bool:
+        return self._service.loesche_betriebsferien(mandant_id, eintrag_id)

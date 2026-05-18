@@ -11,14 +11,19 @@ class IZeiteintragRepository(Protocol):
     def save(self, eintrag: Zeiteintrag) -> Zeiteintrag:
         ...
 
-    def get_by_datum(self, datum: date) -> list[Zeiteintrag]:
+    def get_by_datum(self, mandant_id: int, datum: date) -> list[Zeiteintrag]:
         ...
 
-    def list_all(self, jahr: Optional[int] = None, monat: Optional[int] = None) -> list[Zeiteintrag]:
+    def list_all(
+        self,
+        mandant_id: int,
+        jahr: Optional[int] = None,
+        monat: Optional[int] = None,
+    ) -> list[Zeiteintrag]:
         ...
 
-    def delete_by_datum(self, datum: date) -> bool:
+    def delete_by_datum(self, mandant_id: int, datum: date) -> bool:
         ...
 
-    def delete_by_id(self, eintrag_id: UUID) -> bool:
+    def delete_by_id(self, mandant_id: int, eintrag_id: UUID) -> bool:
         ...

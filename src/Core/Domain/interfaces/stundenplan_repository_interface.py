@@ -9,14 +9,14 @@ class IStundenplanRepository(Protocol):
     def save(self, eintrag: Stundenplan) -> Stundenplan:
         ...
 
-    def get_by_wochentag(self, wochentag: int) -> list[Stundenplan]:
+    def get_by_wochentag(self, mandant_id: int, wochentag: int) -> list[Stundenplan]:
         ...
 
-    def list_all(self) -> list[Stundenplan]:
+    def list_all(self, mandant_id: int) -> list[Stundenplan]:
         ...
 
-    def delete_by_wochentag(self, wochentag: int) -> bool:
+    def delete_by_wochentag(self, mandant_id: int, wochentag: int) -> bool:
         ...
 
-    def delete_by_id(self, eintrag_id: int) -> bool:
+    def delete_by_id(self, mandant_id: int, eintrag_id: int) -> bool:
         ...

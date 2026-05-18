@@ -95,9 +95,13 @@ class ApplicationDIModule(Module):
             schulferien_service,
             betriebsferien_service,
         )
-        anwendung.set_vertrag_stunden_nach_wochentag(
-            app_config.soll_nach_vertrag_nach_wochentag
-        )
+        if app_config.mandanten:
+            erster = app_config.mandanten[0].id
+            wochen = app_config.wochenstunden_pro_mandant.get(erster)
+            if wochen is not None:
+                anwendung.set_vertrag_stunden_nach_wochentag(
+                    wochen.soll_nach_vertrag_nach_wochentag
+                )
         anwendung.set_sollstunden_an_feiertagen(app_config.sollstunden_an_feiertagen)
         anwendung.set_kommentar_urlaubstage(app_config.kommentar_urlaubstage)
         anwendung.set_kommentar_krankheitstage(app_config.kommentar_krankheitstage)

@@ -12,6 +12,7 @@ from Core.Application.stundenplan_anwendung import StundenplanAnwendung
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
 from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung
 from Core.Application.zeiteintrag_dto_anwendung import ZeiteintragAnwendungDTO
+from App.app_config import MandantWochenstunden
 from Core.Domain.models.models_worktime import Stundenplan, Zeiteintrag, ZeiteintragsDTO
 from External.Presentation.Desktop.feiertag_registry import FeiertagRegistry
 from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
@@ -55,6 +56,7 @@ class ZeiteintragViewModel(QObject):
         self._zu_loeschende_ids: list[UUID] = []
         self._geladenes_jahr: int | None = None
         self._geladenes_monat: int | None = None
+        self._mandant_id: int | None = None
         self._feiertag_registry.feiertage_geaendert.connect(self._auf_feiertage_geaendert)
         self._stundenplan_registry.stundenplan_geaendert.connect(self._auf_stundenplan_geaendert)
         self._table_model.dataChanged.connect(self._on_table_data_changed)
@@ -123,6 +125,20 @@ class ZeiteintragViewModel(QObject):
     @property
     def table_model(self) -> ZeiteintragTableModel:
         return self._table_model
+
+    def set_mandant_id(self, mandant_id: int) -> None:
+        self._mandant_id = mandant_id
+
+    def apply_mandant_wochenstunden(self, wochenstunden: MandantWochenstunden) -> None:
+        if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
+            self._anwendung.set_vertrag_stunden_nach_wochentag(
+                wochenstunden.soll_nach_vertrag_nach_wochentag
+            )
+
+    def _aktuelle_mandant_id(self) -> int:
+        if self._mandant_id is None:
+            raise RuntimeError("Mandant ist noch nicht gesetzt.")
+        return self._mandant_id
 
     def uebernehme_stundenplan_in_zeile(
         self, row_index: int, stundenplan: StundenplanRow
@@ -211,6 +227,7 @@ class ZeiteintragViewModel(QObject):
             self._anreichere_tage(daten_zum_anreichern)
 
     def lade_zeitraum(self, jahr: int, monat: int, *, status_anzeigen: bool = True) -> None:
+        mandant_id = self._aktuelle_mandant_id()
         feiertage = self._feiertag_anwendung.liste(jahr=jahr)
         self._feiertag_registry.aktualisiere_jahr(jahr, feiertage, benachrichtigen=False)
 
@@ -223,12 +240,15 @@ class ZeiteintragViewModel(QObject):
 
         if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
             eintraege = self._anwendung.liste_im_monat(
+                mandant_id,
                 jahr=jahr,
                 monat=monat,
                 stundenplan_eintraege=stundenplan_eintraege,
             )
         else:
-            eintraege = self._anwendung.liste_im_monat(jahr=jahr, monat=monat)
+            eintraege = self._anwendung.liste_im_monat(
+                mandant_id, jahr=jahr, monat=monat
+            )
         rows = [self._map_to_row(eintrag) for eintrag in eintraege]
 
         self._table_model.set_rows(rows)
@@ -358,6 +378,7 @@ class ZeiteintragViewModel(QObject):
         self.lade_zeitraum(self._geladenes_jahr, self._geladenes_monat, status_anzeigen=True)
 
     def speichere_alle(self) -> bool:
+        mandant_id = self._aktuelle_mandant_id()
         zeilen_zum_speichern = [
             (zeilen_nummer, row)
             for zeilen_nummer, row in enumerate(self._table_model.rows, start=1)
@@ -376,7 +397,7 @@ class ZeiteintragViewModel(QObject):
         verbleibende_loeschungen: list[UUID] = []
         for eintrag_id in self._zu_loeschende_ids:
             try:
-                if self._anwendung.loesche_per_id(eintrag_id):
+                if self._anwendung.loesche_per_id(mandant_id, eintrag_id):
                     geloescht += 1
             except Exception as exc:  # noqa: BLE001
                 fehler.append(f"Löschen {eintrag_id}: {exc}")
@@ -395,6 +416,7 @@ class ZeiteintragViewModel(QObject):
                 anmerkung = (row.anmerkung or "").strip() or None
                 eintrag = Zeiteintrag(
                     id=row.id,
+                    mandant_id=mandant_id,
                     datum=self._parse_date(row.datum),
                     uhrzeit_von=self._parse_time(row.uhrzeit_von, "uhrzeit_von"),
                     uhrzeit_bis=self._parse_time(row.uhrzeit_bis, "uhrzeit_bis"),

@@ -14,7 +14,9 @@ class ZeiteintragService:
         self._repository = repository
 
     def erfasse_zeiteintrag(self, eintrag: Zeiteintrag) -> Zeiteintrag:
-        vorhandene_eintraege = self._repository.get_by_datum(eintrag.datum)
+        if eintrag.mandant_id is None:
+            raise ValueError("mandant_id ist erforderlich.")
+        vorhandene_eintraege = self._repository.get_by_datum(eintrag.mandant_id, eintrag.datum)
         for vorhandener_eintrag in vorhandene_eintraege:
             if eintrag.id is not None and vorhandener_eintrag.id == eintrag.id:
                 continue
@@ -29,19 +31,22 @@ class ZeiteintragService:
                 )
         return self._repository.save(eintrag)
 
-    def hole_zeiteintrag(self, datum: date) -> list[Zeiteintrag]:
-        return self._repository.get_by_datum(datum)
+    def hole_zeiteintrag(self, mandant_id: int, datum: date) -> list[Zeiteintrag]:
+        return self._repository.get_by_datum(mandant_id, datum)
 
     def liste_zeiteintraege(
-        self, jahr: Optional[int] = None, monat: Optional[int] = None
+        self,
+        mandant_id: int,
+        jahr: Optional[int] = None,
+        monat: Optional[int] = None,
     ) -> list[Zeiteintrag]:
-        return self._repository.list_all(jahr=jahr, monat=monat)
+        return self._repository.list_all(mandant_id, jahr=jahr, monat=monat)
 
-    def loesche_zeiteintrag(self, datum: date) -> bool:
-        return self._repository.delete_by_datum(datum)
+    def loesche_zeiteintrag(self, mandant_id: int, datum: date) -> bool:
+        return self._repository.delete_by_datum(mandant_id, datum)
 
-    def loesche_zeiteintrag_per_id(self, eintrag_id: UUID) -> bool:
-        return self._repository.delete_by_id(eintrag_id)
+    def loesche_zeiteintrag_per_id(self, mandant_id: int, eintrag_id: UUID) -> bool:
+        return self._repository.delete_by_id(mandant_id, eintrag_id)
 
     @staticmethod
     def _get_monatstage(jahr: int, monat: int) -> list[date]:

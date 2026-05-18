@@ -17,4 +17,4 @@ def test_erfasse_aus_stundenplan_falscher_wochentag():
     plan = stundenplan_montag()
     plan = plan.model_copy(update={"wochentag": 2})
     with pytest.raises(ValueError, match="Wochentag"):
-        app.erfasse_aus_stundenplan(date(2025, 3, 10), plan)
+        app.erfasse_aus_stundenplan(1, date(2025, 3, 10), plan)

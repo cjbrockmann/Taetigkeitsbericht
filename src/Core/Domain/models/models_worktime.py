@@ -111,6 +111,7 @@ class ArbeitszeitBasis(BaseModel):
 # Hauptmodell für Zeiteinträge, das in der Datenbank gespeichert wird
 class Zeiteintrag(ArbeitszeitBasis):
     id: Optional[UUID] = None
+    mandant_id: Optional[int] = Field(default=None, description="Mandant ID")
     datum: date
 
 # Klasse, die an die GUI übergeben wird, mit zusätzlichen Feldern für die Anzeige und Bearbeitung
@@ -145,9 +146,8 @@ class ZeiteintragsDTO(Zeiteintrag):
 # Klasse für den Stundenplan, der eine Vorlage für die Soll-Arbeitszeiten an jedem Wochentag darstellt
 class Stundenplan(ArbeitszeitBasis):
     id: Optional[int] = None
+    mandant_id: Optional[int] = Field(default=None, description="Mandant ID")
     wochentag: int = Field(ge=1, le=7, description="1=Montag, 7=Sonntag")
-
-
 
 
 # -------------------------------------------------------------------------------
@@ -204,6 +204,7 @@ class Krankmeldung(BaseModel):
 
 class Betriebsferien(BaseModel):
     id: Optional[int] = None
+    mandant_id: Optional[int] = Field(default=None, description="Mandant ID")
     datum_von: date = Field(description="Datum von")
     datum_bis: date = Field(description="Datum bis")
     betriebsferienname: str = Field(description="Betriebsferienname", max_length=80)

@@ -172,6 +172,7 @@ class DesktopPresentationDIModule(Module):
             betriebsferien_view,
             schulferien_view,
             mandant_auswahl=mandant_auswahl,
+            app_config=app_config,
             excel_export=app_config.zeiteintrag_excel_export,
             ausgeblendete_spalten=app_config.zeiteintrag_ausgeblendete_spalten,
         )

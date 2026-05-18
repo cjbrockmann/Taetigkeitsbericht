@@ -28,38 +28,149 @@ class InMemoryZeiteintragRepository:
         self._by_id: dict[UUID, Zeiteintrag] = {}
 
     def save(self, eintrag: Zeiteintrag) -> Zeiteintrag:
+        if eintrag.mandant_id is None:
+            raise ValueError("mandant_id ist erforderlich.")
         if eintrag.id is None:
             eintrag = eintrag.model_copy(update={"id": uuid4()})
         self._by_id[eintrag.id] = eintrag
         return eintrag
 
-    def get_by_datum(self, datum: date) -> list[Zeiteintrag]:
+    def get_by_datum(self, mandant_id: int, datum: date) -> list[Zeiteintrag]:
         return sorted(
-            (e for e in self._by_id.values() if e.datum == datum),
+            (
+                e
+                for e in self._by_id.values()
+                if e.mandant_id == mandant_id and e.datum == datum
+            ),
             key=lambda e: e.uhrzeit_von,
         )
 
     def list_all(
-        self, jahr: Optional[int] = None, monat: Optional[int] = None
+        self,
+        mandant_id: int,
+        jahr: Optional[int] = None,
+        monat: Optional[int] = None,
     ) -> list[Zeiteintrag]:
-        result = list(self._by_id.values())
+        result = [e for e in self._by_id.values() if e.mandant_id == mandant_id]
         if jahr is not None:
             result = [e for e in result if e.datum.year == jahr]
         if monat is not None:
             result = [e for e in result if e.datum.month == monat]
         return sorted(result, key=lambda e: (e.datum, e.uhrzeit_von))
 
-    def delete_by_datum(self, datum: date) -> bool:
-        ids = [eid for eid, e in self._by_id.items() if e.datum == datum]
+    def delete_by_datum(self, mandant_id: int, datum: date) -> bool:
+        ids = [
+            eid
+            for eid, e in self._by_id.items()
+            if e.mandant_id == mandant_id and e.datum == datum
+        ]
         for eid in ids:
             del self._by_id[eid]
         return bool(ids)
 
-    def delete_by_id(self, eintrag_id: UUID) -> bool:
-        if eintrag_id not in self._by_id:
+    def delete_by_id(self, mandant_id: int, eintrag_id: UUID) -> bool:
+        eintrag = self._by_id.get(eintrag_id)
+        if eintrag is None or eintrag.mandant_id != mandant_id:
             return False
         del self._by_id[eintrag_id]
         return True
+
+
+class InMemoryStundenplanRepository:
+    def __init__(self, eintraege: list[Stundenplan] | None = None) -> None:
+        self._eintraege: list[Stundenplan] = list(eintraege or [])
+        self._naechste_id = max((e.id or 0 for e in self._eintraege), default=0) + 1
+
+    def save(self, eintrag: Stundenplan) -> Stundenplan:
+        if eintrag.mandant_id is None:
+            raise ValueError("mandant_id ist erforderlich.")
+        if eintrag.id is not None:
+            for idx, vorhanden in enumerate(self._eintraege):
+                if vorhanden.id == eintrag.id:
+                    self._eintraege[idx] = eintrag
+                    return eintrag
+        neu = eintrag.model_copy(update={"id": self._naechste_id})
+        self._naechste_id += 1
+        self._eintraege.append(neu)
+        return neu
+
+    def get_by_wochentag(self, mandant_id: int, wochentag: int) -> list[Stundenplan]:
+        return sorted(
+            (
+                e
+                for e in self._eintraege
+                if e.mandant_id == mandant_id and e.wochentag == wochentag
+            ),
+            key=lambda e: e.uhrzeit_von,
+        )
+
+    def list_all(self, mandant_id: int) -> list[Stundenplan]:
+        return sorted(
+            (e for e in self._eintraege if e.mandant_id == mandant_id),
+            key=lambda e: (e.wochentag, e.uhrzeit_von),
+        )
+
+    def delete_by_wochentag(self, mandant_id: int, wochentag: int) -> bool:
+        vorher = len(self._eintraege)
+        self._eintraege = [
+            e
+            for e in self._eintraege
+            if not (e.mandant_id == mandant_id and e.wochentag == wochentag)
+        ]
+        return len(self._eintraege) < vorher
+
+    def delete_by_id(self, mandant_id: int, eintrag_id: int) -> bool:
+        vorher = len(self._eintraege)
+        self._eintraege = [
+            e
+            for e in self._eintraege
+            if not (e.id == eintrag_id and e.mandant_id == mandant_id)
+        ]
+        return len(self._eintraege) < vorher
+
+
+class InMemoryBetriebsferienRepository:
+    def __init__(self, items: list[Betriebsferien] | None = None) -> None:
+        self._items: list[Betriebsferien] = list(items or [])
+        self._naechste_id = max((e.id or 0 for e in self._items), default=0) + 1
+
+    def save(self, eintrag: Betriebsferien) -> Betriebsferien:
+        if eintrag.mandant_id is None:
+            raise ValueError("mandant_id ist erforderlich.")
+        if eintrag.id is not None:
+            for idx, vorhanden in enumerate(self._items):
+                if vorhanden.id == eintrag.id:
+                    self._items[idx] = eintrag
+                    return eintrag
+        neu = eintrag.model_copy(update={"id": self._naechste_id})
+        self._naechste_id += 1
+        self._items.append(neu)
+        return neu
+
+    def get_by_id(self, mandant_id: int, eintrag_id: int) -> Optional[Betriebsferien]:
+        for eintrag in self._items:
+            if eintrag.id == eintrag_id and eintrag.mandant_id == mandant_id:
+                return eintrag
+        return None
+
+    def list_all(self, mandant_id: int, jahr: Optional[int] = None) -> list[Betriebsferien]:
+        result = [b for b in self._items if b.mandant_id == mandant_id]
+        if jahr is None:
+            return list(result)
+        return [
+            b
+            for b in result
+            if b.datum_von.year == jahr or b.datum_bis.year == jahr
+        ]
+
+    def delete_by_id(self, mandant_id: int, eintrag_id: int) -> bool:
+        vorher = len(self._items)
+        self._items = [
+            b
+            for b in self._items
+            if not (b.id == eintrag_id and b.mandant_id == mandant_id)
+        ]
+        return len(self._items) < vorher
 
 
 class _FeiertagListRepo:
@@ -120,26 +231,6 @@ class _SchulferienListRepo:
         ]
 
 
-class _BetriebsferienListRepo:
-    def __init__(self, items: list[Betriebsferien]) -> None:
-        self._items = list(items)
-
-    def list_all(self, jahr: Optional[int] = None) -> list[Betriebsferien]:
-        if jahr is None:
-            return list(self._items)
-        return [
-            b for b in self._items if b.datum_von.year == jahr or b.datum_bis.year == jahr
-        ]
-
-
-class _StundenplanListRepo:
-    def __init__(self, eintraege: list[Stundenplan]) -> None:
-        self._eintraege = list(eintraege)
-
-    def list_all(self) -> list[Stundenplan]:
-        return list(self._eintraege)
-
-
 def dto_anwendung(
     *,
     zeiteintraege: list[Zeiteintrag] | None = None,
@@ -165,12 +256,12 @@ def dto_anwendung(
 
     app = ZeiteintragAnwendungDTO(
         ZeiteintragService(ze_repo),
-        StundenplanService(_StundenplanListRepo(stundenplan)),
+        StundenplanService(InMemoryStundenplanRepository(stundenplan)),
         FeiertagService(_FeiertagListRepo(feiertage)),
         UrlaubsantragService(_UrlaubListRepo(urlaub)),
         KrankmeldungService(_KrankListRepo(krank)),
         SchulferienService(_SchulferienListRepo(schulferien)),
-        BetriebsferienService(_BetriebsferienListRepo(betriebsferien)),
+        BetriebsferienService(InMemoryBetriebsferienRepository(betriebsferien)),
     )
     app.set_vertrag_stunden_nach_wochentag(
         vertrag_stunden

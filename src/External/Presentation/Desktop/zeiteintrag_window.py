@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from App.app_config import (
+    AppConfig,
     Mandant,
     ZeiteintragExcelExportSettings,
     load_zeiteintrag_excel_export_settings,
@@ -363,10 +364,12 @@ class ZeiteintragWindow(QMainWindow):
         betriebsferien_view: BetriebsferienView,
         schulferien_view: SchulferienView,
         mandant_auswahl: MandantAuswahl,
+        app_config: AppConfig,
         excel_export: ZeiteintragExcelExportSettings | None = None,
         ausgeblendete_spalten: Sequence[int] | None = None,
     ) -> None:
         super().__init__()
+        self._app_config = app_config
         self._mandant_auswahl = mandant_auswahl
         self._view_model = view_model
         self._stundenplan_view = stundenplan_view
@@ -389,7 +392,7 @@ class ZeiteintragWindow(QMainWindow):
         self.resize(1200, 640)
         self._build_ui()
         self._bind_view_model()
-        self._load_selected_period()
+        self._synchronisiere_mandant_views(erstes_laden=True)
 
     def _erzeuge_container_gruppe(self) -> QFrame:
         """Rahmen ueber allen Tabs mit Mandantenauswahl."""
@@ -532,6 +535,22 @@ class ZeiteintragWindow(QMainWindow):
 
     def _on_mandant_id_geaendert(self, _mandant_id: int) -> None:
         self._wende_mandant_rowcounter_farben(self._mandant_auswahl.aktueller_mandant())
+        self._synchronisiere_mandant_views(erstes_laden=False)
+
+    def _synchronisiere_mandant_views(self, *, erstes_laden: bool) -> None:
+        mandant_id = self._mandant_auswahl.mandant_id
+        self._view_model.set_mandant_id(mandant_id)
+        wochenstunden = self._app_config.wochenstunden_pro_mandant.get(mandant_id)
+        if wochenstunden is not None:
+            self._view_model.apply_mandant_wochenstunden(wochenstunden)
+        self._stundenplan_view.set_mandant_id(mandant_id)
+        self._betriebsferien_view.set_mandant_id(mandant_id)
+        self._stundenplan_view.bei_mandant_gewechselt()
+        self._betriebsferien_view.bei_mandant_gewechselt()
+        if erstes_laden or (
+            self._current_loaded_year is not None and self._current_loaded_month is not None
+        ):
+            self._load_selected_period()
 
     def _build_ui(self) -> None:
         zeiteintrag_widget = QWidget(self)

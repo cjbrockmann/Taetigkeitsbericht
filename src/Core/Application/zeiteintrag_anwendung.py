@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, time
+from datetime import date
 from typing import Optional
 from uuid import UUID
 
@@ -17,7 +17,7 @@ class ZeiteintragAnwendung:
         return self._service.erfasse_zeiteintrag(eintrag)
 
     def erfasse_aus_stundenplan(
-        self, datum: date, stundenplan_eintrag: Stundenplan
+        self, mandant_id: int, datum: date, stundenplan_eintrag: Stundenplan
     ) -> Zeiteintrag:
         # Wie Stundenplan.wochentag: 1 = Montag, 7 = Sonntag (ISO 8601)
         erwarteter_wochentag = datum.isoweekday()
@@ -28,6 +28,7 @@ class ZeiteintragAnwendung:
                 f"fuer das Datum erwartet: {erwarteter_wochentag})."
             )
         zeiteintrag = Zeiteintrag(
+            mandant_id=mandant_id,
             datum=datum,
             uhrzeit_von=stundenplan_eintrag.uhrzeit_von,
             uhrzeit_bis=stundenplan_eintrag.uhrzeit_bis,
@@ -39,15 +40,19 @@ class ZeiteintragAnwendung:
         )
         return self.erfasse(zeiteintrag)
 
-    def hole_fuer_datum(self, datum: date) -> list[Zeiteintrag]:
-        return self._service.hole_zeiteintrag(datum)
+    def hole_fuer_datum(self, mandant_id: int, datum: date) -> list[Zeiteintrag]:
+        return self._service.hole_zeiteintrag(mandant_id, datum)
 
-    def liste(self, jahr: Optional[int] = None, monat: Optional[int] = None) -> list[Zeiteintrag]:
-        return self._service.liste_zeiteintraege(jahr=jahr, monat=monat)
+    def liste(
+        self,
+        mandant_id: int,
+        jahr: Optional[int] = None,
+        monat: Optional[int] = None,
+    ) -> list[Zeiteintrag]:
+        return self._service.liste_zeiteintraege(mandant_id, jahr=jahr, monat=monat)
 
-    def loesche_fuer_datum(self, datum: date) -> bool:
-        return self._service.loesche_zeiteintrag(datum)
+    def loesche_fuer_datum(self, mandant_id: int, datum: date) -> bool:
+        return self._service.loesche_zeiteintrag(mandant_id, datum)
 
-    def loesche_per_id(self, eintrag_id: UUID) -> bool:
-        return self._service.loesche_zeiteintrag_per_id(eintrag_id)
-
+    def loesche_per_id(self, mandant_id: int, eintrag_id: UUID) -> bool:
+        return self._service.loesche_zeiteintrag_per_id(mandant_id, eintrag_id)

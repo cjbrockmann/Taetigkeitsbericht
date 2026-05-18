@@ -179,7 +179,6 @@ class StundenplanView(QWidget):
         self._baseline_rows: list[tuple[object, int, str, str, str, str, str, str, str]] = []
         self._build_ui()
         self._bind_view_model()
-        self._lade_alle()
 
     @property
     def has_unsaved_changes(self) -> bool:
@@ -187,6 +186,12 @@ class StundenplanView(QWidget):
 
     def set_rowcounter_color(self, color: str) -> None:
         apply_rowcounter_color_to_table(self._table, color)
+
+    def set_mandant_id(self, mandant_id: int) -> None:
+        self._view_model.set_mandant_id(mandant_id)
+
+    def bei_mandant_gewechselt(self) -> None:
+        self._lade_alle()
 
     def verwerfe_ungespeicherte_aenderungen(self) -> None:
         self._lade_alle()

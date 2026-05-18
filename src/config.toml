@@ -14,6 +14,27 @@ mandanten = [
 ]
 
 [sollstunden]
+sollstunden_an_feiertagen = false 
+kommentar_urlaubstage = "U"
+kommentar_krankheitstage = "K"
+kommentar_ueberstunden_frei = "Ü-Frei" 
+prefix_kommentar_feiertage = "F:"
+prefix_kommentar_betriebsferientage = "B:" 
+
+# Vertrags-Soll je Wochentag (Spalte „Vertrag“) — pro Mandant eine Gruppe.
+[wochenstunden]
+wochenstunden_regel = 40
+wochenstunden_max = 48
+
+# kommentar_urlaub_krank_modus — Anzeige und Speicherung in der Kommentarspalte an Urlaubs-/Krankheitstagen (Mo–Fr mit Vertrags-Soll).
+# Zulaessige Werte: "praefix" | "kuerzel" (ungueltiger Wert → Standard "kuerzel").
+#   praefix — Kuerzel mit Doppelpunkt und optionalem Zusatz (z. B. „U: “ oder „K: mein Text“)
+#   kuerzel — nur das Kuerzel aus kommentar_urlaubstage / kommentar_krankheitstage (z. B. „U“ oder „K“)
+kommentar_urlaub_krank_modus = "kuerzel"
+
+
+[[wochenstunden.mandant]]
+mandant_id = 1
 wochenstunden = [
     { wochentag = 1, stunden = "4:00", name = "Montag" },
     { wochentag = 2, stunden = "4:00", name = "Dienstag" },
@@ -23,23 +44,20 @@ wochenstunden = [
     { wochentag = 6, stunden = "0:00", name = "Samstag" },
     { wochentag = 7, stunden = "0:00", name = "Sonntag" },
 ]
-wochenstunden_regel = 40
-wochenstunden_max = 48
 wochenstunden_summe = 16
-sollstunden_an_feiertagen = false 
-kommentar_urlaubstage = "U"
-kommentar_krankheitstage = "K"
-kommentar_ueberstunden_frei = "Ü-Frei" 
-prefix_kommentar_feiertage = "F:"
-prefix_kommentar_betriebsferientage = "B:" 
 
-
-
-# kommentar_urlaub_krank_modus — Anzeige und Speicherung in der Kommentarspalte an Urlaubs-/Krankheitstagen (Mo–Fr mit Vertrags-Soll).
-# Zulaessige Werte: "praefix" | "kuerzel" (ungueltiger Wert → Standard "kuerzel").
-#   praefix — Kuerzel mit Doppelpunkt und optionalem Zusatz (z. B. „U: “ oder „K: mein Text“)
-#   kuerzel — nur das Kuerzel aus kommentar_urlaubstage / kommentar_krankheitstage (z. B. „U“ oder „K“)
-kommentar_urlaub_krank_modus = "kuerzel"
+[[wochenstunden.mandant]]
+mandant_id = 2
+wochenstunden = [
+    { wochentag = 1, stunden = "0:00", name = "Montag" },
+    { wochentag = 2, stunden = "0:00", name = "Dienstag" },
+    { wochentag = 3, stunden = "0:00", name = "Mittwoch" },
+    { wochentag = 4, stunden = "0:00", name = "Donnerstag" },
+    { wochentag = 5, stunden = "4:00", name = "Freitag" },
+    { wochentag = 6, stunden = "0:00", name = "Samstag" },
+    { wochentag = 7, stunden = "0:00", name = "Sonntag" },
+]
+wochenstunden_summe = 4
 
 
 

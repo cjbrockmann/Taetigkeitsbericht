@@ -15,6 +15,7 @@ from Core.Domain.models.models_worktime import (
 
 def zeiteintrag(
     *,
+    mandant_id: int = 1,
     datum: date | None = None,
     uhrzeit_von: time | None = time(8, 0),
     uhrzeit_bis: time | None = time(16, 0),
@@ -22,6 +23,7 @@ def zeiteintrag(
 ) -> Zeiteintrag:
     return Zeiteintrag(
         id=uuid4(),
+        mandant_id=mandant_id,
         datum=datum or date(2025, 3, 10),
         uhrzeit_von=uhrzeit_von,
         uhrzeit_bis=uhrzeit_bis,
@@ -31,6 +33,7 @@ def zeiteintrag(
 
 def zeiteintrags_dto(
     *,
+    mandant_id: int = 1,
     datum: date | None = None,
     uhrzeit_von: time | None = None,
     uhrzeit_bis: time | None = None,
@@ -38,6 +41,7 @@ def zeiteintrags_dto(
 ) -> ZeiteintragsDTO:
     return ZeiteintragsDTO(
         id=None,
+        mandant_id=mandant_id,
         datum=datum or date(2025, 3, 10),
         uhrzeit_von=uhrzeit_von,
         uhrzeit_bis=uhrzeit_bis,
@@ -47,11 +51,13 @@ def zeiteintrags_dto(
 
 def stundenplan_montag(
     *,
+    mandant_id: int = 1,
     von: time = time(8, 0),
     bis: time = time(12, 0),
 ) -> Stundenplan:
     return Stundenplan(
         id=1,
+        mandant_id=mandant_id,
         wochentag=1,
         uhrzeit_von=von,
         uhrzeit_bis=bis,

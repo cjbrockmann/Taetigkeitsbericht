@@ -135,6 +135,15 @@ class Mandant:
 
 
 @dataclass(frozen=True)
+class MandantWochenstunden:
+    """Vertrags-Soll je Wochentag und Summe — pro Mandant ([[wochenstunden.mandant]])."""
+
+    mandant_id: int
+    soll_nach_vertrag_nach_wochentag: dict[int, str] = field(default_factory=dict)
+    wochenstunden_summe: float = 0.0
+
+
+@dataclass(frozen=True)
 class ZeiteintragExcelExportSettings:
     """Einstellungen fuer „Fuer Excel kopieren“ (TSV + HTML in Zwischenablage)."""
 
@@ -222,7 +231,9 @@ class AppConfig:
     name: str = "Taetigkeitsbericht"
     version: str = "0.0.0"
     mandanten: tuple[Mandant, ...] = ()
-    soll_nach_vertrag_nach_wochentag: dict[int, str] = field(default_factory=dict)
+    wochenstunden_pro_mandant: dict[int, MandantWochenstunden] = field(default_factory=dict)
+    wochenstunden_regel: float = 0.0
+    wochenstunden_max: float = 0.0
     sollstunden_an_feiertagen: bool = False
     kommentar_urlaubstage: str = ""
     kommentar_krankheitstage: str = ""
@@ -351,6 +362,11 @@ def _sollstunden_section(data: dict[str, Any]) -> dict[str, Any]:
     return sec if isinstance(sec, dict) else {}
 
 
+def _wochenstunden_section(data: dict[str, Any]) -> dict[str, Any]:
+    sec = data.get("wochenstunden")
+    return sec if isinstance(sec, dict) else {}
+
+
 def _section_sollstunden_an_feiertagen(data: dict[str, Any]) -> bool:
     return bool(_sollstunden_section(data).get("sollstunden_an_feiertagen", False))
 
@@ -366,8 +382,12 @@ def _section_kommentar_krankheitstage(data: dict[str, Any]) -> str:
 
 
 def _section_kommentar_urlaub_krank_modus(data: dict[str, Any]) -> str:
-    wert = _sollstunden_section(data).get(
-        "kommentar_urlaub_krank_modus", DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
+    sec = _wochenstunden_section(data)
+    wert = sec.get(
+        "kommentar_urlaub_krank_modus",
+        _sollstunden_section(data).get(
+            "kommentar_urlaub_krank_modus", DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
+        ),
     )
     modus = str(wert).strip().lower() if wert is not None else DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
     if modus == "prefix":
@@ -377,29 +397,86 @@ def _section_kommentar_urlaub_krank_modus(data: dict[str, Any]) -> str:
     return modus
 
 
+def _section_wochenstunden_regel(data: dict[str, Any]) -> float:
+    return float(_wochenstunden_section(data).get("wochenstunden_regel", 0) or 0)
+
+
+def _section_wochenstunden_max(data: dict[str, Any]) -> float:
+    return float(_wochenstunden_section(data).get("wochenstunden_max", 0) or 0)
+
+
 def _section_kommentar_ueberstunden_frei(data: dict[str, Any]) -> str:
     wert = _sollstunden_section(data).get("kommentar_ueberstunden_frei", "")
     return str(wert).strip() if wert is not None else ""
 
 
-def _section_soll_nach_vertrag(data: dict[str, Any]) -> dict[int, str]:
-    sec = _sollstunden_section(data)
-    if not sec:
-        return {}
-    wochenstunden = sec.get("wochenstunden")
-    if not isinstance(wochenstunden, list):
-        return {}
+def _parse_wochenstunden_liste(
+    wochenstunden: list[Any], pfad_prefix: str
+) -> dict[int, str]:
     out: dict[int, str] = {}
     for idx, eintrag in enumerate(wochenstunden, start=1):
         if not isinstance(eintrag, dict):
-            raise TypeError(f"sollstunden.wochenstunden[{idx}] muss eine Tabelle sein.")
+            raise TypeError(f"{pfad_prefix}[{idx}] muss eine Tabelle sein.")
         if "wochentag" not in eintrag or "stunden" not in eintrag:
             continue
         wt = int(eintrag["wochentag"])
         if not 1 <= wt <= 7:
-            raise ValueError(f"wochentag {wt} ungueltig (erwartet 1..7).")
+            raise ValueError(f"{pfad_prefix}[{idx}].wochentag {wt} ungueltig (erwartet 1..7).")
         out[wt] = _stunden_zu_hh_mm(eintrag["stunden"])
     return out
+
+
+def _parse_mandant_wochenstunden_gruppe(
+    eintrag: dict[str, Any], pfad: str
+) -> MandantWochenstunden:
+    if "mandant_id" not in eintrag:
+        raise ValueError(f"{pfad}: mandant_id ist Pflichtfeld.")
+    mandant_id = int(eintrag["mandant_id"])
+    raw_liste = eintrag.get("wochenstunden")
+    if not isinstance(raw_liste, list):
+        raise TypeError(f"{pfad}.wochenstunden muss eine Liste sein.")
+    return MandantWochenstunden(
+        mandant_id=mandant_id,
+        soll_nach_vertrag_nach_wochentag=_parse_wochenstunden_liste(
+            raw_liste, f"{pfad}.wochenstunden"
+        ),
+        wochenstunden_summe=float(eintrag.get("wochenstunden_summe", 0) or 0),
+    )
+
+
+def _section_wochenstunden_pro_mandant(
+    data: dict[str, Any], mandanten: tuple[Mandant, ...]
+) -> dict[int, MandantWochenstunden]:
+    sec = _wochenstunden_section(data)
+    gruppen = sec.get("mandant")
+    ergebnis: dict[int, MandantWochenstunden] = {}
+
+    if isinstance(gruppen, list):
+        ids: set[int] = set()
+        for idx, eintrag in enumerate(gruppen, start=1):
+            if not isinstance(eintrag, dict):
+                raise TypeError(f"wochenstunden.mandant[{idx}] muss eine Tabelle sein.")
+            config = _parse_mandant_wochenstunden_gruppe(
+                eintrag, f"wochenstunden.mandant[{idx}]"
+            )
+            if config.mandant_id in ids:
+                raise ValueError(
+                    f"wochenstunden.mandant[{idx}]: id {config.mandant_id} ist bereits vergeben."
+                )
+            ids.add(config.mandant_id)
+            ergebnis[config.mandant_id] = config
+
+    if not ergebnis:
+        legacy = _sollstunden_section(data).get("wochenstunden")
+        if isinstance(legacy, list) and mandanten:
+            mapping = _parse_wochenstunden_liste(legacy, "sollstunden.wochenstunden")
+            for mandant in mandanten:
+                ergebnis[mandant.id] = MandantWochenstunden(
+                    mandant_id=mandant.id,
+                    soll_nach_vertrag_nach_wochentag=dict(mapping),
+                )
+
+    return ergebnis
 
 
 def load_app_config(config_path: Path | None = None) -> AppConfig:
@@ -412,11 +489,14 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         data = tomllib.load(f)
     if not isinstance(data, dict):
         return AppConfig()
+    mandanten = _section_mandanten(data)
     return AppConfig(
         name=str(data.get("name", "Taetigkeitsbericht")),
         version=str(data.get("version", "0.0.0")),
-        mandanten=_section_mandanten(data),
-        soll_nach_vertrag_nach_wochentag=_section_soll_nach_vertrag(data),
+        mandanten=mandanten,
+        wochenstunden_pro_mandant=_section_wochenstunden_pro_mandant(data, mandanten),
+        wochenstunden_regel=_section_wochenstunden_regel(data),
+        wochenstunden_max=_section_wochenstunden_max(data),
         sollstunden_an_feiertagen=_section_sollstunden_an_feiertagen(data),
         kommentar_urlaubstage=_section_kommentar_urlaubstage(data),
         kommentar_krankheitstage=_section_kommentar_krankheitstage(data),

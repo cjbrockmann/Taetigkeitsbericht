@@ -20,13 +20,22 @@ class BetriebsferienViewModel(QObject):
         super().__init__()
         self._anwendung = anwendung
         self._table_model = BetriebsferienTableModel()
+        self._mandant_id: int | None = None
+
+    def set_mandant_id(self, mandant_id: int) -> None:
+        self._mandant_id = mandant_id
+
+    def _aktuelle_mandant_id(self) -> int:
+        if self._mandant_id is None:
+            raise RuntimeError("Mandant ist noch nicht gesetzt.")
+        return self._mandant_id
 
     @property
     def table_model(self) -> BetriebsferienTableModel:
         return self._table_model
 
     def lade_fuer_jahr(self, jahr: int) -> None:
-        eintraege = self._anwendung.liste(jahr=jahr)
+        eintraege = self._anwendung.liste(self._aktuelle_mandant_id(), jahr=jahr)
         rows = [
             BetriebsferienRow(
                 id=eintrag.id,
@@ -60,6 +69,7 @@ class BetriebsferienViewModel(QObject):
         anm = anmerkung_text.strip()
         eintrag = Betriebsferien(
             id=eintrag_id,
+            mandant_id=self._aktuelle_mandant_id(),
             datum_von=datum_von,
             datum_bis=datum_bis,
             betriebsferienname=nm,
@@ -75,7 +85,7 @@ class BetriebsferienViewModel(QObject):
         if eintrag_id is None:
             self.error_occurred.emit("Ungültige Auswahl (keine Id).")
             return False
-        geloescht = self._anwendung.loesche(eintrag_id)
+        geloescht = self._anwendung.loesche(self._aktuelle_mandant_id(), eintrag_id)
         if geloescht:
             self.status_changed.emit("Betriebsferien gelöscht.")
         else:

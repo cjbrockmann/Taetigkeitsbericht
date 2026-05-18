@@ -11,6 +11,7 @@ class ZeiteintragTable(SQLModel, table=True):
     __tablename__ = "zeiteintrag"
 
     id: str = Field(sa_column=Column(String(36), primary_key=True))
+    mandant_id: int
     datum: date
     uhrzeit_von: time
     uhrzeit_bis: time
@@ -25,6 +26,7 @@ class StundenplanTable(SQLModel, table=True):
     __tablename__ = "stundenplan"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    mandant_id: int
     wochentag: int = Field(ge=1, le=7)
     uhrzeit_von: time
     uhrzeit_bis: time
@@ -69,6 +71,7 @@ class BetriebsferienTable(SQLModel, table=True):
     __tablename__ = "betriebsferien"
 
     id: Optional[int] = Field(default=None, primary_key=True)
+    mandant_id: int
     datum_von: date
     datum_bis: date
     betriebsferienname: str = Field(max_length=80)

@@ -16,7 +16,7 @@ def test_erfasse_zeiteintrag_speichert_neu():
     eintrag = zeiteintrag(datum=date(2025, 4, 1))
     gespeichert = service.erfasse_zeiteintrag(eintrag)
     assert gespeichert.id is not None
-    assert len(service.hole_zeiteintrag(date(2025, 4, 1))) == 1
+    assert len(service.hole_zeiteintrag(1, date(2025, 4, 1))) == 1
 
 
 def test_ueberschneidung_am_selben_tag_wirft_fehler():
@@ -24,6 +24,7 @@ def test_ueberschneidung_am_selben_tag_wirft_fehler():
     service = ZeiteintragService(repo)
     service.erfasse_zeiteintrag(
         Zeiteintrag(
+            mandant_id=1,
             datum=date(2025, 4, 1),
             uhrzeit_von=time(8, 0),
             uhrzeit_bis=time(12, 0),
@@ -32,6 +33,7 @@ def test_ueberschneidung_am_selben_tag_wirft_fehler():
     with pytest.raises(ValueError, match="ueberschneidet"):
         service.erfasse_zeiteintrag(
             Zeiteintrag(
+                mandant_id=1,
                 datum=date(2025, 4, 1),
                 uhrzeit_von=time(10, 0),
                 uhrzeit_bis=time(14, 0),

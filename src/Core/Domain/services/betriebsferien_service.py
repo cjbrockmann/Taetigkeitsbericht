@@ -11,7 +11,9 @@ class BetriebsferienService:
         self._repository = repository
 
     def erfasse_betriebsferien(self, eintrag: Betriebsferien) -> Betriebsferien:
-        for vorhanden in self._repository.list_all(jahr=None):
+        if eintrag.mandant_id is None:
+            raise ValueError("mandant_id ist erforderlich.")
+        for vorhanden in self._repository.list_all(eintrag.mandant_id, jahr=None):
             if eintrag.id is not None and vorhanden.id == eintrag.id:
                 continue
             if (
@@ -25,11 +27,13 @@ class BetriebsferienService:
                 )
         return self._repository.save(eintrag)
 
-    def hole_betriebsferien(self, eintrag_id: int) -> Optional[Betriebsferien]:
-        return self._repository.get_by_id(eintrag_id)
+    def hole_betriebsferien(self, mandant_id: int, eintrag_id: int) -> Optional[Betriebsferien]:
+        return self._repository.get_by_id(mandant_id, eintrag_id)
 
-    def liste_betriebsferien(self, jahr: Optional[int] = None) -> list[Betriebsferien]:
-        return self._repository.list_all(jahr=jahr)
+    def liste_betriebsferien(
+        self, mandant_id: int, jahr: Optional[int] = None
+    ) -> list[Betriebsferien]:
+        return self._repository.list_all(mandant_id, jahr=jahr)
 
-    def loesche_betriebsferien(self, eintrag_id: int) -> bool:
-        return self._repository.delete_by_id(eintrag_id)
+    def loesche_betriebsferien(self, mandant_id: int, eintrag_id: int) -> bool:
+        return self._repository.delete_by_id(mandant_id, eintrag_id)

@@ -29,6 +29,15 @@ class StundenplanViewModel(QObject):
         self._table_model = StundenplanTableModel()
         self._eintraege_cache: list[Stundenplan] = []
         self._zu_loeschende_ids: list[int] = []
+        self._mandant_id: int | None = None
+
+    def set_mandant_id(self, mandant_id: int) -> None:
+        self._mandant_id = mandant_id
+
+    def _aktuelle_mandant_id(self) -> int:
+        if self._mandant_id is None:
+            raise RuntimeError("Mandant ist noch nicht gesetzt.")
+        return self._mandant_id
 
     @property
     def table_model(self) -> StundenplanTableModel:
@@ -39,7 +48,7 @@ class StundenplanViewModel(QObject):
         return list(self._zu_loeschende_ids)
 
     def lade_alle(self) -> None:
-        eintraege = self._anwendung.liste()
+        eintraege = self._anwendung.liste(self._aktuelle_mandant_id())
         self._eintraege_cache = list(eintraege)
         rows = [self._map_to_row(eintrag) for eintrag in eintraege]
         self._table_model.set_rows(rows)
@@ -57,6 +66,7 @@ class StundenplanViewModel(QObject):
 
     def stundenplan_eintraege_aus_tabelle(self) -> list[Stundenplan]:
         """Alle gueltigen Zeilen der Stundenplan-Tabelle als Domain-Objekte."""
+        mandant_id = self._aktuelle_mandant_id()
         eintraege: list[Stundenplan] = []
         for row in self._table_model.rows:
             if not (row.uhrzeit_von.strip() and row.uhrzeit_bis.strip()):
@@ -65,6 +75,7 @@ class StundenplanViewModel(QObject):
                 eintraege.append(
                     Stundenplan(
                         id=row.id,
+                        mandant_id=mandant_id,
                         wochentag=row.wochentag,
                         uhrzeit_von=self._parse_time(row.uhrzeit_von, "uhrzeit_von"),
                         uhrzeit_bis=self._parse_time(row.uhrzeit_bis, "uhrzeit_bis"),
@@ -106,6 +117,7 @@ class StundenplanViewModel(QObject):
         self._table_model.remove_rows(row_indices)
 
     def speichere_alle(self) -> bool:
+        mandant_id = self._aktuelle_mandant_id()
         zeilen_zum_speichern = [
             (zeilen_nummer, row)
             for zeilen_nummer, row in enumerate(self._table_model.rows, start=1)
@@ -125,6 +137,7 @@ class StundenplanViewModel(QObject):
             try:
                 eintrag = Stundenplan(
                     id=row.id,
+                    mandant_id=mandant_id,
                     wochentag=row.wochentag,
                     uhrzeit_von=self._parse_time(row.uhrzeit_von, "uhrzeit_von"),
                     uhrzeit_bis=self._parse_time(row.uhrzeit_bis, "uhrzeit_bis"),
@@ -148,7 +161,7 @@ class StundenplanViewModel(QObject):
         verbleibende_loeschungen: list[int] = []
         for eintrag_id in self._zu_loeschende_ids:
             try:
-                if self._anwendung.loesche_per_id(eintrag_id):
+                if self._anwendung.loesche_per_id(mandant_id, eintrag_id):
                     geloescht += 1
             except Exception as exc:  # noqa: BLE001
                 fehler.append(f"Löschen {eintrag_id}: {exc}")

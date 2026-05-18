@@ -50,6 +50,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self.schulferien: list[Schulferien] = []
         self.betriebsferien: list[Betriebsferien] = []
         self._geladenes_jahr: Optional[int] = None
+        self._geladenes_mandant_id: Optional[int] = None
         self._vertrag_stunden_nach_wochentag: dict[int, str] = {}
         self._sollstunden_an_feiertagen: bool = False
         self._kommentar_urlaubstage: str = ""
@@ -65,26 +66,37 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         return self._zeiteintrag_zu_dto(parent_erfasse)	
 
     def erfasse_aus_stundenplan(
-        self, datum: date, stundenplan_eintrag: Stundenplan
+        self,
+        mandant_id: int,
+        datum: date,
+        stundenplan_eintrag: Stundenplan,
     ) -> ZeiteintragsDTO:
-        parent_erfasse_aus_stundenplan = super().erfasse_aus_stundenplan(datum, stundenplan_eintrag)
+        parent_erfasse_aus_stundenplan = super().erfasse_aus_stundenplan(
+            mandant_id, datum, stundenplan_eintrag
+        )
         return self._zeiteintrag_zu_dto(parent_erfasse_aus_stundenplan)
 
-    def hole_fuer_datum(self, datum: date) -> list[ZeiteintragsDTO]:
-        parent_hole_fuer_datum = super().hole_fuer_datum(datum)
+    def hole_fuer_datum(self, mandant_id: int, datum: date) -> list[ZeiteintragsDTO]:
+        parent_hole_fuer_datum = super().hole_fuer_datum(mandant_id, datum)
         return list(map(self._zeiteintrag_zu_dto, parent_hole_fuer_datum))
 
     def erfasse_wie_in_gui(self, eintrag: Zeiteintrag) -> Zeiteintrag:
         """Persistiert den Eintrag unveraendert (Anmerkung wie in der Tabelle), ohne Anreicherung."""
         return super().erfasse(eintrag)
 
-    def liste(self, jahr: Optional[int] = None, monat: Optional[int] = None) -> list[ZeiteintragsDTO]:
-        parent_liste = super().liste(jahr=jahr, monat=monat)
+    def liste(
+        self,
+        mandant_id: int,
+        jahr: Optional[int] = None,
+        monat: Optional[int] = None,
+    ) -> list[ZeiteintragsDTO]:
+        parent_liste = super().liste(mandant_id, jahr=jahr, monat=monat)
         result = list(map(self._zeiteintrag_zu_dto, parent_liste))
         return result
 
     def liste_im_monat(
         self,
+        mandant_id: int,
         jahr: int,
         monat: int,
         *,
@@ -93,8 +105,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
 
         if stundenplan_eintraege is not None:
             self.stundenplan_eintraege = list(stundenplan_eintraege)
-        self._initialisiere_jahresdaten(jahr, force=True)
-        parent_liste = super().liste(jahr=jahr, monat=monat)
+        self._initialisiere_jahresdaten(mandant_id, jahr, force=True)
+        parent_liste = super().liste(mandant_id, jahr=jahr, monat=monat)
         eintraege = [self._basiseintrag_aus_zeiteintrag(e) for e in parent_liste]
 
         eintraege_nach_tag: dict[date, list[ZeiteintragsDTO]] = {}
@@ -113,6 +125,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
                 alle_eintraege.append(
                     ZeiteintragsDTO(
                         id=None,
+                        mandant_id=mandant_id,
                         datum=aktuelles_datum,
                         uhrzeit_von=None,
                         uhrzeit_bis=None,
@@ -134,18 +147,20 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         if not eintraege:
             return
         jahr = eintraege[0].datum.year
-        self._initialisiere_jahresdaten(jahr)
+        mandant_id = eintraege[0].mandant_id
+        if mandant_id is not None:
+            self._initialisiere_jahresdaten(mandant_id, jahr)
         for eintrag in eintraege:
             self._initialisiere_dto(eintrag)
             self._wende_kommentar_regeln_an(eintrag)
         self._setze_soll_felder_fuer_tag(eintraege)
         self._aktualisiere_geleistete_stunden_fuer_tag(eintraege)
 
-    def loesche_fuer_datum(self, datum: date) -> bool:
-        return super().loesche_fuer_datum(datum)
-    
-    def loesche_per_id(self, eintrag_id: UUID) -> bool:
-        return super().loesche_per_id(eintrag_id)
+    def loesche_fuer_datum(self, mandant_id: int, datum: date) -> bool:
+        return super().loesche_fuer_datum(mandant_id, datum)
+
+    def loesche_per_id(self, mandant_id: int, eintrag_id: UUID) -> bool:
+        return super().loesche_per_id(mandant_id, eintrag_id)
 
     # ----------------------------------------------------------------------  
     #   Hilfsfunktionen
@@ -153,10 +168,17 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         """Setzt den Stundenplan-Cache (z. B. aus der aktuellen Stundenplan-Tabelle)."""
         self.stundenplan_eintraege = list(eintraege)
 
-    def _initialisiere_jahresdaten(self, jahr: int, force: bool = False) -> None:
-        if self._geladenes_jahr == jahr and not force:     
+    def _initialisiere_jahresdaten(
+        self, mandant_id: int, jahr: int, force: bool = False
+    ) -> None:
+        if (
+            self._geladenes_jahr == jahr
+            and self._geladenes_mandant_id == mandant_id
+            and not force
+        ):
             return  # Bereits geladen, nichts zu tun
         self._geladenes_jahr = jahr
+        self._geladenes_mandant_id = mandant_id
 
         if not any(e.datum.year == jahr for e in self.feiertage) or force:
             self.feiertage = self._serviceFeiertage.liste_feiertage(jahr)
@@ -171,7 +193,9 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             self.schulferien = self._serviceSchulferien.liste_schulferien(jahr)
 
         if not any(e.datum_von.year == jahr or e.datum_bis.year == jahr for e in self.betriebsferien) or force:
-            self.betriebsferien = self._serviceBetriebsferien.liste_betriebsferien(jahr)
+            self.betriebsferien = self._serviceBetriebsferien.liste_betriebsferien(
+                mandant_id, jahr
+            )
 
 
     def _sekunden_seit_mitternacht(self, t: time) -> int:
@@ -257,7 +281,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self._kommentar_krankheitstage = text.strip()
 
     def set_kommentar_urlaub_krank_modus(self, modus: str) -> None:
-        """praefix = „U: …“ / „K: …“; kuerzel = nur „U“ / „K“ ([sollstunden].kommentar_urlaub_krank_modus)."""
+        """praefix = „U: …“ / „K: …“; kuerzel = nur „U“ / „K“ ([wochenstunden].kommentar_urlaub_krank_modus)."""
         m = modus.strip().lower()
         if m == "prefix":
             m = "praefix"
@@ -534,6 +558,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
     def _basiseintrag_aus_zeiteintrag(self, eintrag: Zeiteintrag) -> ZeiteintragsDTO:
         return ZeiteintragsDTO(
             id=eintrag.id,
+            mandant_id=eintrag.mandant_id,
             datum=eintrag.datum,
             uhrzeit_von=eintrag.uhrzeit_von,
             uhrzeit_bis=eintrag.uhrzeit_bis,
@@ -561,7 +586,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
 
     def _zeiteintrag_zu_dto(self, eintrag: Zeiteintrag) -> ZeiteintragsDTO:
         jahr = eintrag.datum.year
-        self._initialisiere_jahresdaten(jahr)
+        if eintrag.mandant_id is not None:
+            self._initialisiere_jahresdaten(eintrag.mandant_id, jahr)
         dto = self._initialisiere_dto(self._basiseintrag_aus_zeiteintrag(eintrag))
         self.anreichere_eintraege_fuer_tag([dto])
         return dto
@@ -571,6 +597,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             return None
         return Zeiteintrag(
             id=eintrag.id,
+            mandant_id=eintrag.mandant_id,
             datum=eintrag.datum,
             uhrzeit_von=time(0, 0, 0) if eintrag.uhrzeit_von is None else eintrag.uhrzeit_von,
             uhrzeit_bis=time(0, 0, 1) if eintrag.uhrzeit_bis is None else eintrag.uhrzeit_bis,

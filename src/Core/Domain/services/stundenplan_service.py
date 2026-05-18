@@ -11,7 +11,11 @@ class StundenplanService:
         self._repository = repository
 
     def erfasse_stundenplaneintrag(self, eintrag: Stundenplan) -> Stundenplan:
-        vorhandene_eintraege = self._repository.get_by_wochentag(eintrag.wochentag)
+        if eintrag.mandant_id is None:
+            raise ValueError("mandant_id ist erforderlich.")
+        vorhandene_eintraege = self._repository.get_by_wochentag(
+            eintrag.mandant_id, eintrag.wochentag
+        )
         for vorhandener_eintrag in vorhandene_eintraege:
             if eintrag.id is not None and vorhandener_eintrag.id == eintrag.id:
                 continue
@@ -26,17 +30,17 @@ class StundenplanService:
                 )
         return self._repository.save(eintrag)
 
-    def hole_stundenplan(self, wochentag: int) -> list[Stundenplan]:
-        return self._repository.get_by_wochentag(wochentag)
+    def hole_stundenplan(self, mandant_id: int, wochentag: int) -> list[Stundenplan]:
+        return self._repository.get_by_wochentag(mandant_id, wochentag)
 
-    def liste_stundenplan_eintraege(self) -> list[Stundenplan]:
-        return self._repository.list_all()
+    def liste_stundenplan_eintraege(self, mandant_id: int) -> list[Stundenplan]:
+        return self._repository.list_all(mandant_id)
 
-    def loesche_stundenplan(self, wochentag: int) -> bool:
-        return self._repository.delete_by_wochentag(wochentag)
+    def loesche_stundenplan(self, mandant_id: int, wochentag: int) -> bool:
+        return self._repository.delete_by_wochentag(mandant_id, wochentag)
 
-    def loesche_stundenplan_per_id(self, eintrag_id: int) -> bool:
-        return self._repository.delete_by_id(eintrag_id)
+    def loesche_stundenplan_per_id(self, mandant_id: int, eintrag_id: int) -> bool:
+        return self._repository.delete_by_id(mandant_id, eintrag_id)
 
     @staticmethod
     def _zeitraeume_ueberschneiden_sich(

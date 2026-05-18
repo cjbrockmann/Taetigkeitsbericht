@@ -53,6 +53,13 @@ class BetriebsferienView(QWidget):
     def set_rowcounter_color(self, color: str) -> None:
         apply_rowcounter_color_to_table(self._table, color)
 
+    def set_mandant_id(self, mandant_id: int) -> None:
+        self._view_model.set_mandant_id(mandant_id)
+
+    def bei_mandant_gewechselt(self) -> None:
+        if self._initial_load_done:
+            self._lade_auswahl_jahr()
+
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         if self._initial_load_done:
