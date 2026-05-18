@@ -84,13 +84,18 @@ def _parse_cell_spec(raw: Any) -> tuple[int | None, ...]:
 
 ZEITEINTRAG_SPALTEN_MAX: Final[int] = 19
 STUNDENPLAN_SPALTEN_MAX: Final[int] = 8
+DEFAULT_ZEITEINTRAG_GRAUER_HINTERGRUND_SPALTEN: Final[tuple[int, ...]] = (2, 3, 4, 5, 6)
 
 
-def _parse_ausgeblendete_spalten(
-    raw: Any, max_index: int, pfad_in_config: str
+def _parse_spalten_indizes(
+    raw: Any,
+    max_index: int,
+    pfad_in_config: str,
+    *,
+    default: tuple[int, ...] | None = None,
 ) -> tuple[int, ...]:
     if raw is None:
-        return ()
+        return default if default is not None else ()
     if not isinstance(raw, list):
         raise TypeError(f"{pfad_in_config} muss eine Liste sein.")
     out: set[int] = set()
@@ -109,6 +114,12 @@ def _parse_ausgeblendete_spalten(
             )
         out.add(x)
     return tuple(sorted(out))
+
+
+def _parse_ausgeblendete_spalten(
+    raw: Any, max_index: int, pfad_in_config: str
+) -> tuple[int, ...]:
+    return _parse_spalten_indizes(raw, max_index, pfad_in_config)
 
 
 @dataclass(frozen=True)
@@ -159,6 +170,9 @@ class AppConfig:
     kommentar_krankheitstage: str = ""
     kommentar_ueberstunden_frei: str = ""
     zeiteintrag_ausgeblendete_spalten: tuple[int, ...] = ()
+    zeiteintrag_grauer_hintergrund_spalten: tuple[int, ...] = (
+        DEFAULT_ZEITEINTRAG_GRAUER_HINTERGRUND_SPALTEN
+    )
     stundenplan_ausgeblendete_spalten: tuple[int, ...] = ()
     zeiteintrag_excel_export: ZeiteintragExcelExportSettings = field(
         default_factory=ZeiteintragExcelExportSettings
@@ -232,16 +246,31 @@ def _parse_excel_spalten_indizes(
     )
 
 
-def _section_zeiteintrag_tabelle(data: dict[str, Any]) -> tuple[int, ...]:
+def _zeiteintrag_tabelle_section(data: dict[str, Any]) -> dict[str, Any]:
     sec = data.get("zeiteintrag_tabelle")
     if sec is None:
-        return ()
+        return {}
     if not isinstance(sec, dict):
         raise TypeError("[zeiteintrag_tabelle] muss eine Tabelle sein.")
+    return sec
+
+
+def _section_zeiteintrag_ausgeblendete_spalten(data: dict[str, Any]) -> tuple[int, ...]:
+    sec = _zeiteintrag_tabelle_section(data)
     return _parse_ausgeblendete_spalten(
         sec.get("ausgeblendete_spalten"),
         ZEITEINTRAG_SPALTEN_MAX,
         "zeiteintrag_tabelle.ausgeblendete_spalten",
+    )
+
+
+def _section_zeiteintrag_grauer_hintergrund_spalten(data: dict[str, Any]) -> tuple[int, ...]:
+    sec = _zeiteintrag_tabelle_section(data)
+    return _parse_spalten_indizes(
+        sec.get("grauer_hintergrund_spalten"),
+        ZEITEINTRAG_SPALTEN_MAX,
+        "zeiteintrag_tabelle.grauer_hintergrund_spalten",
+        default=DEFAULT_ZEITEINTRAG_GRAUER_HINTERGRUND_SPALTEN,
     )
 
 
@@ -320,7 +349,10 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         kommentar_urlaubstage=_section_kommentar_urlaubstage(data),
         kommentar_krankheitstage=_section_kommentar_krankheitstage(data),
         kommentar_ueberstunden_frei=_section_kommentar_ueberstunden_frei(data),
-        zeiteintrag_ausgeblendete_spalten=_section_zeiteintrag_tabelle(data),
+        zeiteintrag_ausgeblendete_spalten=_section_zeiteintrag_ausgeblendete_spalten(data),
+        zeiteintrag_grauer_hintergrund_spalten=_section_zeiteintrag_grauer_hintergrund_spalten(
+            data
+        ),
         stundenplan_ausgeblendete_spalten=_section_stundenplan_tabelle(data),
         zeiteintrag_excel_export=_section_zeiteintrag_excel_export(data),
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime, time
 from typing import Optional
 from uuid import UUID
@@ -9,7 +10,8 @@ from PySide6.QtCore import QObject, Qt, Signal
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
-from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung, ZeiteintragAnwendungDTO
+from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung
+from Core.Application.zeiteintrag_dto_anwendung import ZeiteintragAnwendungDTO
 from Core.Domain.models.models_worktime import Stundenplan, Zeiteintrag, ZeiteintragsDTO
 from External.Presentation.Desktop.feiertag_registry import FeiertagRegistry
 from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
@@ -36,6 +38,7 @@ class ZeiteintragViewModel(QObject):
         stundenplan_anwendung: StundenplanAnwendung,
         stundenplan_registry: StundenplanRegistry,
         stundenplan_view_model: StundenplanViewModel | None = None,
+        grauer_hintergrund_spalten: Sequence[int] | None = None,
     ) -> None:
         super().__init__()
         self._anwendung = anwendung
@@ -44,7 +47,9 @@ class ZeiteintragViewModel(QObject):
         self._stundenplan_anwendung = stundenplan_anwendung
         self._stundenplan_registry = stundenplan_registry
         self._stundenplan_view_model = stundenplan_view_model
-        self._table_model = ZeiteintragTableModel()
+        self._table_model = ZeiteintragTableModel(
+            grauer_hintergrund_spalten=grauer_hintergrund_spalten
+        )
         self._table_model.set_stundenplan_registry(stundenplan_registry)
         self._suspend_anreicherung = False
         self._zu_loeschende_ids: list[UUID] = []

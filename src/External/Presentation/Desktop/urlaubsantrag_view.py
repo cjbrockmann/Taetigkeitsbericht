@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from App.app_config import AppConfig
+from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
 from External.Presentation.Desktop.message_boxes import frage_ja_nein, warnung
 from External.Presentation.Desktop.form_bearbeitung_dirty import (
     dirty_indices_bei_form_bearbeitung,
@@ -136,6 +137,8 @@ class UrlaubsantragView(QWidget):
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
         self._urlaubstage_spin.setFixedWidth(100)
+        self._urlaubstage_hinweis = QLabel("", self._form_group)
+        self._urlaubstage_hinweis.setStyleSheet("color: #616161;")
         self._urlaubstage_aus_datum_vorbelegen()
 
         self._genehmigt_check = QCheckBox("Genehmigt", self._form_group)
@@ -145,6 +148,7 @@ class UrlaubsantragView(QWidget):
         stage_genehmigt_layout.setContentsMargins(0, 0, 0, 0)
         stage_genehmigt_layout.setSpacing(12)
         stage_genehmigt_layout.addWidget(self._urlaubstage_spin)
+        stage_genehmigt_layout.addWidget(self._urlaubstage_hinweis, 0)
         stage_genehmigt_layout.addWidget(self._genehmigt_check)
         stage_genehmigt_layout.addStretch()
 
@@ -220,6 +224,12 @@ class UrlaubsantragView(QWidget):
 
 
         self._status_label = QLabel("Bereit.", self)
+        self._markdown_hilfe = ViewMarkdownHilfe(
+            self,
+            hilfedatei="urlaubsantrag.md",
+            tooltip="Hilfe zu Urlaubsanträgen anzeigen",
+            fenster_titel="Hilfe – Urlaubsantrag",
+        )
 
         root_layout.setSpacing(6)
         root_layout.setContentsMargins(8, 8, 8, 8)
@@ -227,7 +237,10 @@ class UrlaubsantragView(QWidget):
         root_layout.addLayout(toolbar_layout)
         root_layout.addLayout(formular_zeile)
         root_layout.addWidget(self._table)
-        root_layout.addWidget(self._status_label)
+        fuss_layout = QHBoxLayout()
+        fuss_layout.addWidget(self._status_label, 1)
+        fuss_layout.addWidget(self._markdown_hilfe.button)
+        root_layout.addLayout(fuss_layout)
 
         loeschen_shortcut = QShortcut(QKeySequence.StandardKey.Delete, self._table)
         loeschen_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
@@ -374,7 +387,24 @@ class UrlaubsantragView(QWidget):
     def _urlaubstage_aus_datum_vorbelegen(self) -> None:
         von = self._qdate_nach_date(self._datum_von_input.date())
         bis = self._qdate_nach_date(self._datum_bis_input.date())
-        self._urlaubstage_spin.setValue(float(self._anzahl_werktage_mo_fr(von, bis)))
+        werktage = self._anzahl_werktage_mo_fr(von, bis)
+        self._urlaubstage_spin.blockSignals(True)
+        self._urlaubstage_spin.setValue(float(werktage))
+        self._urlaubstage_spin.blockSignals(False)
+        self._aktualisiere_urlaubstage_hinweis(werktage)
+
+    def _aktualisiere_urlaubstage_hinweis(self, werktage: int | None = None) -> None:
+        if werktage is None:
+            von = self._qdate_nach_date(self._datum_von_input.date())
+            bis = self._qdate_nach_date(self._datum_bis_input.date())
+            if bis < von:
+                self._urlaubstage_hinweis.setText("")
+                return
+            werktage = self._anzahl_werktage_mo_fr(von, bis)
+        if werktage == 1:
+            self._urlaubstage_hinweis.setText("1 Werktag (Mo–Fr)")
+        else:
+            self._urlaubstage_hinweis.setText(f"{werktage} Werktage (Mo–Fr)")
 
     def _reset_formular_defaults(self) -> None:
         heute_q = QDate(date.today().year, date.today().month, date.today().day)
@@ -402,6 +432,7 @@ class UrlaubsantragView(QWidget):
         stage_txt = row.urlaubstage.strip().replace(",", ".")
         self._urlaubstage_spin.setValue(float(stage_txt))
         self._genehmigt_check.setChecked(row.genehmigt.strip().lower() == "ja")
+        self._aktualisiere_urlaubstage_hinweis()
 
     def _on_neuer_antrag(self) -> None:
         self._suspend_selection_sync = True

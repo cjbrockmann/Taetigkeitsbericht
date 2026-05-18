@@ -48,6 +48,7 @@ class DesktopPresentationDIModule(Module):
         stundenplan_anwendung: StundenplanAnwendung,
         stundenplan_registry: StundenplanRegistry,
         stundenplan_view_model: StundenplanViewModel,
+        app_config: AppConfig,
     ) -> ZeiteintragViewModel:
         return ZeiteintragViewModel(
             anwendung,
@@ -56,6 +57,7 @@ class DesktopPresentationDIModule(Module):
             stundenplan_anwendung,
             stundenplan_registry,
             stundenplan_view_model,
+            grauer_hintergrund_spalten=app_config.zeiteintrag_grauer_hintergrund_spalten,
         )
 
     @singleton

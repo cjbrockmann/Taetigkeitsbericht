@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from uuid import UUID
@@ -96,6 +97,10 @@ from External.Presentation.Desktop.table_view_styles import (
     DIRTY_ROW_TEXT_COLOR,
     NORMAL_ROW_TEXT_COLOR,
 )
+
+# Gleicher Grauton wie Wochenendzeilen (siehe data(), Qt.BackgroundRole).
+ZEITEINTRAG_WOCHENENDE_HINTERGRUND = QColor("#eeeeee")
+ZEITEINTRAG_NORMALER_HINTERGRUND = QColor("#ffffff")
 
 
 def feiertag_stern_icon() -> QIcon:
@@ -198,12 +203,15 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Name der Schulferien",
     ]
 
-    def __init__(self) -> None:
+    def __init__(
+        self, grauer_hintergrund_spalten: Sequence[int] | None = None
+    ) -> None:
         super().__init__()
         self._rows: list[ZeiteintragRow] = []
         self._dirty_rows: set[int] = set()
         self._feiertag_nach_datum: dict[date, Feiertag] = {}
         self._stundenplan_registry: StundenplanRegistry | None = None
+        self._grauer_hintergrund_spalten = frozenset(grauer_hintergrund_spalten or ())
 
     @property
     def rows(self) -> list[ZeiteintragRow]:
@@ -257,8 +265,10 @@ class ZeiteintragTableModel(QAbstractTableModel):
             return int(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         if role == Qt.BackgroundRole:
             if self._is_weekend_date(row.datum):
-                return QColor("#eeeeee")
-            return QColor("#ffffff")
+                return ZEITEINTRAG_WOCHENENDE_HINTERGRUND
+            if col in self._grauer_hintergrund_spalten:
+                return ZEITEINTRAG_WOCHENENDE_HINTERGRUND
+            return ZEITEINTRAG_NORMALER_HINTERGRUND
         if role == Qt.DecorationRole:
             if col == ZeiteintragSpalte.TAG:
                 if self._feiertag_fuer_datumtext(row.datum) is not None:

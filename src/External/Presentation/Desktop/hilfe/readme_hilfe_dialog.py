@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QWidget
 from QMarkdownView import MarkdownView
 
@@ -21,12 +22,16 @@ def _markdown_inhalt(pfad: Path) -> str:
 
 
 class ReadmeHilfeDialog(QDialog):
-    """Dialog mit Markdown-Ansicht; wiederverwendbar pro Hilfedatei.
+    """Dialog mit Markdown-Ansicht.
 
     Unter Windows sollte ``parent=None`` verwendet werden (Hilfe als eigenes
     Top-Level-Fenster), damit die eingebettete QWebEngineView nicht das
     Hauptfenster kurz minimieren/wiederherstellen lässt. Anschließend
     :meth:`zentriere_ueber` mit dem Hauptfenster aufrufen.
+
+    Für die gesamte Anwendung wird **ein** Dialog über
+    :func:`zeige_gemeinsame_markdown_hilfe` wiederverwendet; der Inhalt wechselt
+    je nach aufgerufener Hilfedatei.
     """
 
     def __init__(
@@ -38,13 +43,10 @@ class ReadmeHilfeDialog(QDialog):
         fenster_titel: str | None = None,
     ) -> None:
         super().__init__(parent)
-        titel = fenster_titel if fenster_titel is not None else tooltip
-        self.setWindowTitle(titel)
-        self.setToolTip(tooltip)
-        self.resize(920, 720)
         self._inhalt_geladen = False
-        self._pfad = hilfedatei_zu_pfad(hilfedatei)
-        self._inhalt = _markdown_inhalt(self._pfad)
+        self._pfad = Path()
+        self._inhalt = ""
+        self.resize(920, 720)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -52,6 +54,23 @@ class ReadmeHilfeDialog(QDialog):
         self._markdown.setExtensions(_MARKDOWN_EXTENSIONS)
         layout.addWidget(self._markdown)
         self._markdown.loadFinished.connect(self._on_markdown_view_loaded)
+
+        self.wechsle_inhalt(hilfedatei, tooltip, fenster_titel)
+
+    def wechsle_inhalt(
+        self,
+        hilfedatei: Path | str,
+        tooltip: str,
+        fenster_titel: str | None = None,
+    ) -> None:
+        """Lädt andere Hilfedatei und aktualisiert Titel; Markdown nach WebEngine-Start."""
+        self.setToolTip(tooltip)
+        titel = fenster_titel if fenster_titel is not None else tooltip
+        self.setWindowTitle(titel)
+        self._pfad = hilfedatei_zu_pfad(hilfedatei)
+        self._inhalt = _markdown_inhalt(self._pfad)
+        if self._inhalt_geladen:
+            self._markdown.setValue(self._inhalt)
 
     def zentriere_ueber(self, bezugsfenster: QWidget) -> None:
         """Positioniert den Dialog über dem Rahmen des Bezugsfensters (meist das Hauptfenster)."""
@@ -71,3 +90,32 @@ class ReadmeHilfeDialog(QDialog):
             return
         self._inhalt_geladen = True
         self._markdown.setValue(self._inhalt)
+
+
+_gemeinsamer_hilfe_dialog: ReadmeHilfeDialog | None = None
+
+
+def zeige_gemeinsame_markdown_hilfe(
+    bezugsfenster: QWidget,
+    *,
+    hilfedatei: Path | str,
+    tooltip: str,
+    fenster_titel: str,
+) -> None:
+    """Genau ein Hilfefenster für die App: Inhalt wechseln, Dialog nach vorn."""
+    global _gemeinsamer_hilfe_dialog
+    if _gemeinsamer_hilfe_dialog is None:
+        _gemeinsamer_hilfe_dialog = ReadmeHilfeDialog(
+            None,
+            hilfedatei=hilfedatei,
+            tooltip=tooltip,
+            fenster_titel=fenster_titel,
+        )
+    else:
+        _gemeinsamer_hilfe_dialog.wechsle_inhalt(
+            hilfedatei, tooltip, fenster_titel
+        )
+    _gemeinsamer_hilfe_dialog.zentriere_ueber(bezugsfenster)
+    _gemeinsamer_hilfe_dialog.show()
+    _gemeinsamer_hilfe_dialog.raise_()
+    QTimer.singleShot(0, _gemeinsamer_hilfe_dialog.activateWindow)

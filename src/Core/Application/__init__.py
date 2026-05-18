@@ -4,7 +4,8 @@ from .krankmeldung_anwendung import KrankmeldungAnwendung
 from .schulferien_anwendung import SchulferienAnwendung
 from .stundenplan_anwendung import StundenplanAnwendung
 from .urlaubsantrag_anwendung import UrlaubsantragAnwendung
-from .zeiteintrag_anwendung import ZeiteintragAnwendung, ZeiteintragAnwendungDTO
+from .zeiteintrag_anwendung import ZeiteintragAnwendung
+from .zeiteintrag_dto_anwendung import ZeiteintragAnwendungDTO
 
 __all__ = [
     "ZeiteintragAnwendung",

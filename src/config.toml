@@ -33,7 +33,8 @@ prefix_kommentar_betriebsferientage = "B:"
 
 
 # Zeiteintrag-Tabelle (GUI): Spaltenindex 0–19 (ZeiteintragTableModel.HEADERS).
-# Nur in [zeiteintrag_tabelle].ausgeblendete_spalten eintragen; Daten bleiben im Modell.
+# [zeiteintrag_tabelle]: ausgeblendete_spalten, grauer_hintergrund_spalten (siehe Abschnitt unten).
+# Nur ausgeblendete_spalten verbergen Spalten in der GUI; Daten bleiben im Modell.
 # [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (0–19).
 #
 #   0  Tag              — Wochentag (Mo–So), aus Datum, nur Anzeige
@@ -67,6 +68,9 @@ ausgeblendete_spalten = []
 [zeiteintrag_tabelle]
 # Spalte 17 = Kalendertag fuer Excel (nur Export, bleibt fuer cell_spec erhalten)
 ausgeblendete_spalten = [17,18,19]
+# Status-Kennzeichen (F, U, K, Sf, Bf) mit gleichem Grau wie Wochenendzeilen (#eeeeee).
+# Leere Liste [] = keine graue Hervorhebung; weglassen = Standard [2, 3, 4, 5, 6].
+grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 
 
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).

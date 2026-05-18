@@ -25,6 +25,7 @@ from External.Presentation.Desktop.stundenplan_table_model import (
     WOCHENTAG_LABELS,
     StundenplanRow,
 )
+from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
 from External.Presentation.Desktop.message_boxes import warnung
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
 from External.Presentation.Desktop.table_view_styles import (
@@ -202,6 +203,12 @@ class StundenplanView(QWidget):
         self._speichern_button = QPushButton("Alle Zeilen speichern", self)
         self._status_label = QLabel("Bereit.", self)
         self._summen_label = QLabel("", self)
+        self._markdown_hilfe = ViewMarkdownHilfe(
+            self,
+            hilfedatei="stundenplan.md",
+            tooltip="Hilfe zum Stundenplan anzeigen",
+            fenster_titel="Hilfe – Stundenplan",
+        )
 
         toolbar_layout.addStretch()
         toolbar_layout.addWidget(self._zeile_hinzufuegen_button)
@@ -236,6 +243,7 @@ class StundenplanView(QWidget):
         fuss_layout = QHBoxLayout()
         fuss_layout.addWidget(self._status_label, 1)
         fuss_layout.addWidget(self._summen_label)
+        fuss_layout.addWidget(self._markdown_hilfe.button)
         root_layout.addLayout(fuss_layout)
 
         self._zeile_hinzufuegen_button.clicked.connect(self._on_zeile_hinzufuegen)

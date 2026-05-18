@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from External.Presentation.Desktop.schulferien_table_model import SchulferienRow
 from External.Presentation.Desktop.schulferien_view_model import SchulferienViewModel
+from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
 from External.Presentation.Desktop.message_boxes import warnung
 from External.Presentation.Desktop.form_bearbeitung_dirty import (
     dirty_indices_bei_form_bearbeitung,
@@ -161,11 +162,20 @@ class SchulferienView(QWidget):
         header.setStretchLastSection(True)
 
         self._status_label = QLabel("Bereit.", self)
+        self._markdown_hilfe = ViewMarkdownHilfe(
+            self,
+            hilfedatei="schulferien.md",
+            tooltip="Hilfe zu Schulferien anzeigen",
+            fenster_titel="Hilfe – Schulferien",
+        )
 
         root_layout.addLayout(toolbar_layout)
         root_layout.addLayout(oberer_zeile)
         root_layout.addWidget(self._table, stretch=1)
-        root_layout.addWidget(self._status_label)
+        fuss_layout = QHBoxLayout()
+        fuss_layout.addWidget(self._status_label, 1)
+        fuss_layout.addWidget(self._markdown_hilfe.button)
+        root_layout.addLayout(fuss_layout)
 
         self._laden_button.clicked.connect(self._lade_auswahl_jahr)
         self._jahr_spin.valueChanged.connect(self._on_jahr_changed)

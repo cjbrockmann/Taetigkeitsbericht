@@ -9,7 +9,8 @@ from Core.Application.krankmeldung_anwendung import KrankmeldungAnwendung
 from Core.Application.schulferien_anwendung import SchulferienAnwendung
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
 from Core.Application.urlaubsantrag_anwendung import UrlaubsantragAnwendung
-from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung, ZeiteintragAnwendungDTO
+from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung
+from Core.Application.zeiteintrag_dto_anwendung import ZeiteintragAnwendungDTO
 from Core.Domain.interfaces.auth_interface import IAuthService
 from Core.Domain.interfaces.betriebsferien_repository_interface import IBetriebsferienRepository
 from Core.Domain.interfaces.feiertag_repository_interface import IFeiertagRepository

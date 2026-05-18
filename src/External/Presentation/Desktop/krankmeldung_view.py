@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from pydantic import ValidationError
 from PySide6.QtCore import QDate, QLocale, Qt
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from External.Presentation.Desktop.krankmeldung_table_model import KrankmeldungRow
 from External.Presentation.Desktop.krankmeldung_view_model import KrankmeldungViewModel
+from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
 from External.Presentation.Desktop.message_boxes import warnung
 from External.Presentation.Desktop.form_bearbeitung_dirty import (
     dirty_indices_bei_form_bearbeitung,
@@ -169,11 +170,20 @@ class KrankmeldungView(QWidget):
         header.setStretchLastSection(True)
 
         self._status_label = QLabel("Bereit.", self)
+        self._markdown_hilfe = ViewMarkdownHilfe(
+            self,
+            hilfedatei="krankmeldung.md",
+            tooltip="Hilfe zu Krankmeldungen anzeigen",
+            fenster_titel="Hilfe – Krankmeldung",
+        )
 
         root_layout.addLayout(toolbar_layout)
         root_layout.addLayout(oberer_zeile)
         root_layout.addWidget(self._table, stretch=1)
-        root_layout.addWidget(self._status_label)
+        fuss_layout = QHBoxLayout()
+        fuss_layout.addWidget(self._status_label, 1)
+        fuss_layout.addWidget(self._markdown_hilfe.button)
+        root_layout.addLayout(fuss_layout)
 
         self._laden_button.clicked.connect(self._lade_auswahl_jahr)
         self._jahr_spin.valueChanged.connect(self._on_jahr_changed)
@@ -190,12 +200,47 @@ class KrankmeldungView(QWidget):
         self._bind_form_dirty_updates()
 
     def _bind_form_dirty_updates(self) -> None:
-        self._krank_von_input.dateChanged.connect(self._on_form_changed)
+        self._krank_von_input.dateChanged.connect(self._on_krank_von_auswahl_geaendert)
+        self._krank_bis_input.dateChanged.connect(self._krankheitstage_aus_datum_vorbelegen)
         self._krank_bis_input.dateChanged.connect(self._on_form_changed)
         self._krank_bis_input.dateChanged.connect(
             self._aktualisiere_krankheitstage_eingabehilfe
         )
         self._krankmeldungstage_spin.valueChanged.connect(self._on_form_changed)
+
+    def _on_krank_von_auswahl_geaendert(self, qdatum: QDate) -> None:
+        """Krank bis zunächst an Krank von angleichen (wie bei Urlaubsantrag)."""
+        self._krank_bis_input.blockSignals(True)
+        self._krank_bis_input.setDate(qdatum)
+        self._krank_bis_input.blockSignals(False)
+        self._krankheitstage_aus_datum_vorbelegen()
+        self._aktualisiere_krankheitstage_eingabehilfe()
+        self._on_form_changed()
+
+    @staticmethod
+    def _qdate_nach_date(qd: QDate) -> date:
+        return date(qd.year(), qd.month(), qd.day())
+
+    @staticmethod
+    def _anzahl_werktage_mo_fr(von: date, bis: date) -> int:
+        if bis < von:
+            return 0
+        n = 0
+        d = von
+        while d <= bis:
+            if d.weekday() < 5:
+                n += 1
+            d += timedelta(days=1)
+        return n
+
+    def _krankheitstage_aus_datum_vorbelegen(self) -> None:
+        """Werktage Mo–Fr zwischen von und bis wie beim Urlaubsformular."""
+        von = self._qdate_nach_date(self._krank_von_input.date())
+        bis = self._qdate_nach_date(self._krank_bis_input.date())
+        n = max(0, min(self._anzahl_werktage_mo_fr(von, bis), 366))
+        self._krankmeldungstage_spin.blockSignals(True)
+        self._krankmeldungstage_spin.setValue(n)
+        self._krankmeldungstage_spin.blockSignals(False)
 
     def _on_form_changed(self, *_args) -> None:
         self._update_dirty_rows()
@@ -211,7 +256,7 @@ class KrankmeldungView(QWidget):
         return (bis - von).days + 1
 
     def _aktualisiere_krankheitstage_eingabehilfe(self, *_args) -> None:
-        """Hinweis neben Krankheitstage: Kalendertage von–bis (nur Anzeige, kein Auto-Wert)."""
+        """Hinweis neben Krankheitstage: Werktage von–bis (nur Anzeige, kein Auto-Wert)."""
         tage = self._kalendertage_inklusiv(
             self._krank_von_input.date(), self._krank_bis_input.date()
         )
@@ -221,7 +266,7 @@ class KrankmeldungView(QWidget):
         if tage == 1:
             self._krankheitstage_hinweis.setText("1 Kalendertag (von–bis)")
         else:
-            self._krankheitstage_hinweis.setText(f"{tage} Kalendertage (von–bis)")
+            self._krankheitstage_hinweis.setText(f"{tage} Werktage (von–bis)")
 
     def _on_selection_repaint_dirty(self, *_args) -> None:
         self._view_model.table_model.repaint_dirty_rows()

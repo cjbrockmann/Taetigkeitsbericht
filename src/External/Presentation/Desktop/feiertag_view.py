@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from External.Presentation.Desktop.feiertag_view_model import FeiertagViewModel
+from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
 from External.Presentation.Desktop.message_boxes import warnung
 from External.Presentation.Desktop.table_view_styles import (
     FeiertagItemDelegate,
@@ -94,11 +95,20 @@ class FeiertagView(QWidget):
         self._table.verticalHeader().setVisible(True)
 
         self._status_label = QLabel("Bereit.", self)
+        self._markdown_hilfe = ViewMarkdownHilfe(
+            self,
+            hilfedatei="feiertag.md",
+            tooltip="Hilfe zu Feiertagen anzeigen",
+            fenster_titel="Hilfe – Feiertage",
+        )
 
         root_layout.addLayout(toolbar_layout)
         root_layout.addLayout(add_layout)
         root_layout.addWidget(self._table)
-        root_layout.addWidget(self._status_label)
+        fuss_layout = QHBoxLayout()
+        fuss_layout.addWidget(self._status_label, 1)
+        fuss_layout.addWidget(self._markdown_hilfe.button)
+        root_layout.addLayout(fuss_layout)
 
         self._laden_button.clicked.connect(self._lade_auswahl_jahr)
         self._import_button.clicked.connect(self._on_import_starten)
