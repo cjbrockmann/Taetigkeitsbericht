@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date, datetime
+from pathlib import Path
 from uuid import UUID
 
 from PySide6.QtCore import QEvent, QMimeData, QModelIndex, QPersistentModelIndex, QRect, QSize, Qt, QTimer
@@ -61,6 +62,7 @@ from External.Presentation.Desktop.table_view_styles import (
     ZEITEINTRAG_TABLE_VIEW_STYLESHEET,
     paint_option_mit_zeilenfarbe,
 )
+from External.Presentation.Desktop.hilfe import HilfeButton, ReadmeHilfeDialog
 from External.Presentation.Desktop.message_boxes import frage_ja_nein, warnung
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
 from External.Presentation.Desktop.zeiteintrag_table_model import (
@@ -68,6 +70,11 @@ from External.Presentation.Desktop.zeiteintrag_table_model import (
     ZeiteintragTableModel,
 )
 from External.Presentation.Desktop.zeiteintrag_view_model import ZeiteintragViewModel
+
+_DESKTOP_DIR = Path(__file__).resolve().parent
+_ZEITEINTRAG_HILFE_MD = _DESKTOP_DIR / "hilfe" / "zeiteintraege.md"
+_ZEITEINTRAG_HILFE_TOOLTIP = "Hilfe zu den Zeiteinträgen anzeigen"
+_ZEITEINTRAG_HILFE_FENSTER_TITEL = "Hilfe – Zeiteinträge"
 
 
 class LiveCommitDelegate(DirtyRowItemDelegate):
@@ -414,6 +421,12 @@ class ZeiteintragWindow(QMainWindow):
         self._summen_label.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
+        self._hilfe_button = HilfeButton(
+            self,
+            hilfedatei=_ZEITEINTRAG_HILFE_MD,
+            tooltip=_ZEITEINTRAG_HILFE_TOOLTIP,
+        )
+        self._hilfe_dialog: ReadmeHilfeDialog | None = None
         self._author_label = QLabel("Author: Carlos Brockmann", self)
         self._author_label.setAlignment(
             Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
@@ -479,10 +492,17 @@ class ZeiteintragWindow(QMainWindow):
 
         root_layout.addLayout(toolbar_layout)
         root_layout.addWidget(self._table)
+        fuss_rechts = QWidget(self)
+        fuss_rechts_layout = QHBoxLayout(fuss_rechts)
+        fuss_rechts_layout.setContentsMargins(0, 0, 0, 0)
+        fuss_rechts_layout.addStretch(1)
+        fuss_rechts_layout.addWidget(self._summen_label)
+        fuss_rechts_layout.addWidget(self._hilfe_button)
+
         fuss_layout = QHBoxLayout()
         fuss_layout.addWidget(self._status_label, 1)
         fuss_layout.addWidget(author_mitte, 1)
-        fuss_layout.addWidget(self._summen_label, 1)
+        fuss_layout.addWidget(fuss_rechts, 1)
         root_layout.addLayout(fuss_layout)
 
         self._tab_widget = QTabWidget(self)
@@ -502,6 +522,7 @@ class ZeiteintragWindow(QMainWindow):
         self._zeile_hinzufuegen_button.clicked.connect(self._on_zeile_hinzufuegen)
         self._zeile_loeschen_button.clicked.connect(self._on_zeile_loeschen)
         self._speichern_button.clicked.connect(self._on_speichern)
+        self._hilfe_button.clicked.connect(self._on_hilfe_geklickt)
         self._table.doubleClicked.connect(self._on_table_double_clicked)
         self._jahr_spin.valueChanged.connect(self._on_period_changed)
         self._monat_combo.currentIndexChanged.connect(self._on_period_changed)
@@ -545,6 +566,31 @@ class ZeiteintragWindow(QMainWindow):
 
     def _clear_status_label(self) -> None:
         self._status_label.setText("")
+
+    def _on_hilfe_geklickt(self) -> None:
+        if self._hilfe_dialog is not None:
+            self._hilfe_anzeigen()
+            return
+        QTimer.singleShot(0, self._hilfe_erzeugen_und_anzeigen)
+
+    def _hilfe_erzeugen_und_anzeigen(self) -> None:
+        if self._hilfe_dialog is None:
+            self._hilfe_dialog = ReadmeHilfeDialog(
+                None,
+                hilfedatei=_ZEITEINTRAG_HILFE_MD,
+                tooltip=_ZEITEINTRAG_HILFE_TOOLTIP,
+                fenster_titel=_ZEITEINTRAG_HILFE_FENSTER_TITEL,
+            )
+        self._hilfe_anzeigen()
+
+    def _hilfe_anzeigen(self) -> None:
+        dlg = self._hilfe_dialog
+        if dlg is None:
+            return
+        dlg.zentriere_ueber(self)
+        dlg.show()
+        dlg.raise_()
+        QTimer.singleShot(0, dlg.activateWindow)
 
     def _bind_view_model(self) -> None:
         self._view_model.status_changed.connect(self._set_status_text)
