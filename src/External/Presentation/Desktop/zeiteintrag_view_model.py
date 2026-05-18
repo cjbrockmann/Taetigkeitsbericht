@@ -61,10 +61,8 @@ class ZeiteintragViewModel(QObject):
 
     @staticmethod
     def _ist_ueberstunden_platzhalter_row(row: ZeiteintragRow) -> bool:
-        """uhrzeit_von = uhrzeit_bis (z. B. 00:00/00:00) gilt als noch nicht belegt."""
-        von_t = zeit_aus_text(row.uhrzeit_von.strip())
-        bis_t = zeit_aus_text(row.uhrzeit_bis.strip())
-        return von_t is not None and bis_t is not None and von_t == bis_t
+        """Nur ohne sichtbare Von/Bis (versteckte DB-Zeiten); Ue-Frei mit 08:00/08:00 ist belegt."""
+        return not row.uhrzeit_von.strip() and not row.uhrzeit_bis.strip()
 
     @staticmethod
     def _arbeitszeit_feld_fuer_stundenplan_uebernehmbar(
@@ -80,8 +78,6 @@ class ZeiteintragViewModel(QObject):
     ) -> tuple[str, str]:
         """Nur fuer vollstaendige DTOs beim Laden (DB); nicht bei Teileingabe in der Tabelle."""
         if uhrzeit_von is None or uhrzeit_bis is None:
-            return ("", "")
-        if uhrzeit_von == uhrzeit_bis:
             return ("", "")
         return (uhrzeit_von.strftime("%H:%M"), uhrzeit_bis.strftime("%H:%M"))
 
@@ -112,12 +108,8 @@ class ZeiteintragViewModel(QObject):
     ) -> None:
         """DTO -> Zeile; unvollstaendige Von/Bis-Eingabe nicht loeschen."""
         if dto_von is not None and dto_bis is not None:
-            if dto_von == dto_bis:
-                row.uhrzeit_von = ""
-                row.uhrzeit_bis = ""
-            else:
-                row.uhrzeit_von = dto_von.strftime("%H:%M")
-                row.uhrzeit_bis = dto_bis.strftime("%H:%M")
+            row.uhrzeit_von = dto_von.strftime("%H:%M")
+            row.uhrzeit_bis = dto_bis.strftime("%H:%M")
             return
         if dto_von is not None:
             row.uhrzeit_von = dto_von.strftime("%H:%M")
@@ -218,7 +210,7 @@ class ZeiteintragViewModel(QObject):
         if daten_zum_anreichern:
             self._anreichere_tage(daten_zum_anreichern)
 
-    def lade_zeitraum(self, jahr: int, monat: int) -> None:
+    def lade_zeitraum(self, jahr: int, monat: int, *, status_anzeigen: bool = True) -> None:
         feiertage = self._feiertag_anwendung.liste(jahr=jahr)
         self._feiertag_registry.aktualisiere_jahr(jahr, feiertage, benachrichtigen=False)
 
@@ -246,9 +238,10 @@ class ZeiteintragViewModel(QObject):
         self._geladenes_jahr = jahr
         self._geladenes_monat = monat
         self._zu_loeschende_ids.clear()
-        self.status_changed.emit(
-            f"{len(rows)} Zeile(n) für {monat:02d}/{jahr} geladen ({len(eintraege)} aus Datenbank)."
-        )
+        if status_anzeigen:
+            self.status_changed.emit(
+                f"Anzeige aktualisiert: {len(rows)} Zeile(n) geladen"
+            )
 
     def _auf_feiertage_geaendert(self, jahr: int) -> None:
         if self._geladenes_jahr is None or self._geladenes_monat is None:
@@ -362,13 +355,13 @@ class ZeiteintragViewModel(QObject):
     def _auf_stundenplan_geaendert(self) -> None:
         if self._geladenes_jahr is None or self._geladenes_monat is None:
             return
-        self.lade_zeitraum(self._geladenes_jahr, self._geladenes_monat)
+        self.lade_zeitraum(self._geladenes_jahr, self._geladenes_monat, status_anzeigen=True)
 
     def speichere_alle(self) -> bool:
         zeilen_zum_speichern = [
             (zeilen_nummer, row)
             for zeilen_nummer, row in enumerate(self._table_model.rows, start=1)
-            if row.uhrzeit_von.strip() or row.uhrzeit_bis.strip()
+            if row.uhrzeit_von.strip() and row.uhrzeit_bis.strip()
         ]
         gibt_loeschungen = bool(self._zu_loeschende_ids)
 
@@ -399,6 +392,7 @@ class ZeiteintragViewModel(QObject):
                 pause2_von, pause2_bis = self._parse_pausenpaar(
                     row.pause2_beginn, row.pause2_ende, fuer_speichern=True
                 )
+                anmerkung = (row.anmerkung or "").strip() or None
                 eintrag = Zeiteintrag(
                     id=row.id,
                     datum=self._parse_date(row.datum),
@@ -408,19 +402,24 @@ class ZeiteintragViewModel(QObject):
                     pause_ende=pause1_bis,
                     pause2_beginn=pause2_von,
                     pause2_ende=pause2_bis,
-                    anmerkung=row.anmerkung or None,
+                    anmerkung=anmerkung,
                 )
-                gespeicherter_eintrag = self._anwendung.erfasse(eintrag)
+                if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
+                    gespeicherter_eintrag = self._anwendung.erfasse_wie_in_gui(eintrag)
+                else:
+                    gespeicherter_eintrag = self._anwendung.erfasse(eintrag)
                 row.id = gespeicherter_eintrag.id
+                row.anmerkung = anmerkung or ""
                 erfolgreich += 1
             except Exception as exc:  # noqa: BLE001
                 fehler.append(f"Zeile {zeilen_nummer}: {exc}")
 
         if fehler:
             self.error_occurred.emit("\n".join(fehler))
-        self.status_changed.emit(
-            f"{erfolgreich} Zeile(n) gespeichert, {geloescht} gelöscht, {len(fehler)} Fehler."
-        )
+        status = f"{erfolgreich} Zeile(n) gespeichert, {geloescht} gelöscht."
+        if fehler:
+            status += f" {len(fehler)} Fehler."
+        self.status_changed.emit(status)
         return not fehler
 
     @staticmethod
@@ -574,7 +573,6 @@ class ZeiteintragViewModel(QObject):
         row.ist_betriebsferien = eintrag.ist_betriebsferien
         row.feiertagsname = eintrag.feiertagsname or ""
         row.schulferienname = eintrag.schulferienname or ""
-        row.anmerkung_kurz = eintrag.anmerkung_kurz or ""
 
     @staticmethod
     def _map_to_row(eintrag: ZeiteintragsDTO) -> ZeiteintragRow:
@@ -605,5 +603,4 @@ class ZeiteintragViewModel(QObject):
             ist_betriebsferien=eintrag.ist_betriebsferien,
             feiertagsname=eintrag.feiertagsname or "",
             schulferienname=eintrag.schulferienname or "",
-            anmerkung_kurz=eintrag.anmerkung_kurz or "",
         )

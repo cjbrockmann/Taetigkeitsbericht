@@ -31,7 +31,6 @@ class ZeiteintragSpalte:
     TAG_EXCEL = 17
     FEIERTAGSNAME = 18
     SCHULFERIENNAME = 19
-    ANMERKUNG_KURZ = 20
 
     STATUS_KENNZEICHEN = frozenset(
         {URLAUB, KRANK, FEIERTAG_KZ, FERIEN, BETRIEBSFERIEN}
@@ -164,7 +163,6 @@ class ZeiteintragRow:
     ist_betriebsferien: bool = False
     feiertagsname: str = ""
     schulferienname: str = ""
-    anmerkung_kurz: str = ""
 
 
 class ZeiteintragTableModel(QAbstractTableModel):
@@ -191,7 +189,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Tag",
         "Feiertagsname",
         "Schulferienname",
-        "Anm.kurz",
     ]
     HEADER_TOOLTIPS = [
         "Wird automatisch aus dem Datum ermittelt",
@@ -214,7 +211,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Kalendertag als Text für Excel (z. B. 7.)",
         "Name des Feiertags",
         "Name der Schulferien",
-        "Kurzkommentar fuer Excel (nicht gespeichert, aus Anwendungsschicht)",
     ]
 
     def __init__(
@@ -368,8 +364,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 return row.feiertagsname
             case ZeiteintragSpalte.SCHULFERIENNAME:
                 return row.schulferienname
-            case ZeiteintragSpalte.ANMERKUNG_KURZ:
-                return row.anmerkung_kurz
             case _:
                 return None
 
@@ -407,7 +401,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 ZeiteintragSpalte.TAG_EXCEL,
                 ZeiteintragSpalte.FEIERTAGSNAME,
                 ZeiteintragSpalte.SCHULFERIENNAME,
-                ZeiteintragSpalte.ANMERKUNG_KURZ,
             }
         ):
             return False
@@ -464,7 +457,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 ZeiteintragSpalte.TAG_EXCEL,
                 ZeiteintragSpalte.FEIERTAGSNAME,
                 ZeiteintragSpalte.SCHULFERIENNAME,
-                ZeiteintragSpalte.ANMERKUNG_KURZ,
             }
         ):
             return Qt.ItemIsSelectable | Qt.ItemIsEnabled

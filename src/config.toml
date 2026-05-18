@@ -31,11 +31,18 @@ prefix_kommentar_betriebsferientage = "B:"
 
 
 
+# kommentar_urlaub_krank_modus — Anzeige und Speicherung in der Kommentarspalte an Urlaubs-/Krankheitstagen (Mo–Fr mit Vertrags-Soll).
+# Zulaessige Werte: "praefix" | "kuerzel" (ungueltiger Wert → Standard "kuerzel").
+#   praefix — Kuerzel mit Doppelpunkt und optionalem Zusatz (z. B. „U: “ oder „K: mein Text“)
+#   kuerzel — nur das Kuerzel aus kommentar_urlaubstage / kommentar_krankheitstage (z. B. „U“ oder „K“)
+kommentar_urlaub_krank_modus = "kuerzel"
 
-# Zeiteintrag-Tabelle (GUI): Spaltenindex 0–20 (ZeiteintragTableModel.HEADERS).
+
+
+# Zeiteintrag-Tabelle (GUI): Spaltenindex 0–19 (ZeiteintragTableModel.HEADERS).
 # [zeiteintrag_tabelle]: ausgeblendete_spalten, grauer_hintergrund_spalten (siehe Abschnitt unten).
 # Nur ausgeblendete_spalten verbergen Spalten in der GUI; Daten bleiben im Modell.
-# [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (0–20).
+# [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (0–19).
 #
 #   0  Tag              — Wochentag (Mo–So), aus Datum, nur Anzeige
 #   1  Datum            — DD.MM.YYYY, bearbeitbar
@@ -57,7 +64,6 @@ prefix_kommentar_betriebsferientage = "B:"
 #  17  Tag              — Kalendertag als Text fuer Excel (z. B. „7.“), nur Anzeige
 #  18  Feiertagsname    — Name des Feiertags, nur Anzeige
 #  19  Schulferienname  — Name der Schulferien, nur Anzeige
-#  20  Anm.kurz         — Kurzkommentar (DTO anmerkung_kurz), nur Anzeige/Excel, nicht persistiert
 #
 
 
@@ -68,7 +74,7 @@ ausgeblendete_spalten = []
 
 [zeiteintrag_tabelle]
 # Spalte 17 = Kalendertag fuer Excel (nur Export, bleibt fuer cell_spec erhalten)
-ausgeblendete_spalten = [17, 18, 19, 20]
+ausgeblendete_spalten = [17, 18, 19]
 # Status-Kennzeichen (F, U, K, Sf, Bf) mit gleichem Grau wie Wochenendzeilen (#eeeeee).
 # Leere Liste [] = keine graue Hervorhebung; weglassen = Standard [2, 3, 4, 5, 6].
 grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
@@ -76,7 +82,7 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).
 #
-# cell_spec — Spaltenreihenfolge beim Einfuegen in Excel (Quellindices 0…20):
+# cell_spec — Spaltenreihenfolge beim Einfuegen in Excel (Quellindices 0…19):
 #   - Zahl = Wert aus dieser Tabellenspalte (z. B. 0 Wochentag, 17 Kalendertag, 7 Von, 8 Bis, 16 Kommentar)
 #   - "blank" = diese Spalte beim Einfuegen nicht ueberschreiben (Formeln in Excel/Calc)
 #     Bei „blank“: zusaetzlich SpreadsheetML (ss:Index) fuer MS Excel; immer TSV fuer Calc.
@@ -101,5 +107,5 @@ datum_spalten = [1]
 integer_spalten = []
 float_spalten = []
 text_spalten = [17]
-cell_spec = [ 0, 17, 7, 8, 9, 10, 11, 12, "blank", "blank", 20, 16]
+cell_spec = [ 0, 17, 7, 8, 9, 10, 11, 12, "blank", "blank", 16]
 

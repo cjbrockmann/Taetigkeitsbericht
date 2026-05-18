@@ -54,6 +54,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self._sollstunden_an_feiertagen: bool = False
         self._kommentar_urlaubstage: str = ""
         self._kommentar_krankheitstage: str = ""
+        self._kommentar_urlaub_krank_modus: str = "praefix"
         self._kommentar_ueberstunden_frei: str = "Überstunden frei"
 
     # ----------------------------------------------------------------------  
@@ -72,6 +73,10 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
     def hole_fuer_datum(self, datum: date) -> list[ZeiteintragsDTO]:
         parent_hole_fuer_datum = super().hole_fuer_datum(datum)
         return list(map(self._zeiteintrag_zu_dto, parent_hole_fuer_datum))
+
+    def erfasse_wie_in_gui(self, eintrag: Zeiteintrag) -> Zeiteintrag:
+        """Persistiert den Eintrag unveraendert (Anmerkung wie in der Tabelle), ohne Anreicherung."""
+        return super().erfasse(eintrag)
 
     def liste(self, jahr: Optional[int] = None, monat: Optional[int] = None) -> list[ZeiteintragsDTO]:
         parent_liste = super().liste(jahr=jahr, monat=monat)
@@ -133,7 +138,6 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         for eintrag in eintraege:
             self._initialisiere_dto(eintrag)
             self._wende_kommentar_regeln_an(eintrag)
-            self._setze_anmerkung_kurz(eintrag)
         self._setze_soll_felder_fuer_tag(eintraege)
         self._aktualisiere_geleistete_stunden_fuer_tag(eintraege)
 
@@ -252,6 +256,13 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         """Praefix/Kuerzel fuer Kommentar an Krankheitstagen ([sollstunden].kommentar_krankheitstage)."""
         self._kommentar_krankheitstage = text.strip()
 
+    def set_kommentar_urlaub_krank_modus(self, modus: str) -> None:
+        """praefix = „U: …“ / „K: …“; kuerzel = nur „U“ / „K“ ([sollstunden].kommentar_urlaub_krank_modus)."""
+        m = modus.strip().lower()
+        if m == "prefix":
+            m = "praefix"
+        self._kommentar_urlaub_krank_modus = m if m in ("praefix", "kuerzel") else "kuerzel"
+
     def set_kommentar_ueberstunden_frei(self, text: str) -> None:
         """Kommentar bei uhrzeit_von = uhrzeit_bis ([sollstunden].kommentar_ueberstunden_frei)."""
         t = text.strip()
@@ -264,20 +275,29 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             and eintrag.uhrzeit_von == eintrag.uhrzeit_bis
         )
 
+    @staticmethod
+    def _eintrag_hat_von_und_bis(eintrag: ZeiteintragsDTO) -> bool:
+        """Wie beim Speichern: nur Zeilen mit gesetztem Von und Bis."""
+        return eintrag.uhrzeit_von is not None and eintrag.uhrzeit_bis is not None
+
     def _kuerze_anmerkung(self, text: str) -> str:
         return text[: self._MAX_ANMERKUNG_LAENGE]
 
-    def _wende_kommentar_praefix(
-        self, eintrag: ZeiteintragsDTO, prefix: str, bestehend: str
+    def _wende_kommentar_urlaub_krank(
+        self, eintrag: ZeiteintragsDTO, kuerzel: str, bestehend: str
     ) -> None:
-        if not prefix:
+        """Kommentar an Urlaubs-/Krankheitstagen gemaess kommentar_urlaub_krank_modus."""
+        if not kuerzel:
             return
-        prefix_mit_trenner = f"{prefix}: "
-        prefix_mit_punkt_legacy = f"{prefix}."
+        if self._kommentar_urlaub_krank_modus == "kuerzel":
+            eintrag.anmerkung = self._kuerze_anmerkung(kuerzel)
+            return
+        prefix_mit_trenner = f"{kuerzel}: "
+        prefix_mit_punkt_legacy = f"{kuerzel}."
         if not bestehend:
-            eintrag.anmerkung = self._kuerze_anmerkung(prefix)
+            eintrag.anmerkung = self._kuerze_anmerkung(prefix_mit_trenner.strip())
         elif (
-            bestehend == prefix
+            bestehend == kuerzel
             or bestehend.startswith(prefix_mit_trenner)
             or bestehend.startswith(prefix_mit_punkt_legacy)
         ):
@@ -285,8 +305,20 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         else:
             eintrag.anmerkung = self._kuerze_anmerkung(f"{prefix_mit_trenner}{bestehend}")
 
+    def _setze_urlaub_krank_kommentar_ohne_arbeitszeit(
+        self, eintrag: ZeiteintragsDTO, kuerzel: str
+    ) -> None:
+        """Anzeige/Excel: nur K bzw. U, wenn Urlaub/Krank aber kein Von/Bis."""
+        text = kuerzel.strip()
+        if text:
+            eintrag.anmerkung = self._kuerze_anmerkung(text)
+
     def _wende_kommentar_regeln_an(self, eintrag: ZeiteintragsDTO) -> None:
-        """Ueberstunden-frei; Feiertagsname; Krank (K) vor Urlaub (U), jeweils gemaess Config."""
+        """
+        Ueberstunden-frei; Feiertagsname; Krank/Urlaub gemaess Config.
+        Mit Von/Bis: praefix/kuerzel laut kommentar_urlaub_krank_modus.
+        Ohne Von/Bis bei Urlaub/Krank: nur K bzw. U (Anzeige/Excel).
+        """
         if self._ist_ueberstunden_frei_zeitraum(eintrag):
             eintrag.anmerkung = self._kuerze_anmerkung(self._kommentar_ueberstunden_frei)
             return
@@ -301,37 +333,28 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         if eintrag.ist_feiertag:
             return
 
-        if eintrag.ist_krank:
-            if self._sondertag_kommentar_erlaubt(eintrag.datum):
-                self._wende_kommentar_praefix(
+        hat_arbeitszeit = self._eintrag_hat_von_und_bis(eintrag)
+
+        if eintrag.ist_krank and self._sondertag_kommentar_erlaubt(eintrag.datum):
+            if hat_arbeitszeit:
+                self._wende_kommentar_urlaub_krank(
                     eintrag, self._kommentar_krankheitstage, bestehend
+                )
+            else:
+                self._setze_urlaub_krank_kommentar_ohne_arbeitszeit(
+                    eintrag, self._kommentar_krankheitstage
                 )
             return
 
         if eintrag.ist_urlaub and self._sondertag_kommentar_erlaubt(eintrag.datum):
-            self._wende_kommentar_praefix(eintrag, self._kommentar_urlaubstage, bestehend)
-
-    def _setze_anmerkung_kurz(self, eintrag: ZeiteintragsDTO) -> None:
-        """Kurzkommentar fuer Excel: nur Status-Kuerzel, ohne Freitext aus anmerkung."""
-        if self._ist_ueberstunden_frei_zeitraum(eintrag):
-            eintrag.anmerkung_kurz = self._kuerze_anmerkung(self._kommentar_ueberstunden_frei)
-            return
-        if eintrag.ist_feiertag:
-            name = (eintrag.feiertagsname or "").strip()
-            if name:
-                eintrag.anmerkung_kurz = self._kuerze_anmerkung(f"{name}")
+            if hat_arbeitszeit:
+                self._wende_kommentar_urlaub_krank(
+                    eintrag, self._kommentar_urlaubstage, bestehend
+                )
             else:
-                eintrag.anmerkung_kurz = "Feiertag: "
-            return
-        if eintrag.ist_krank and self._sondertag_kommentar_erlaubt(eintrag.datum):
-            kuerzel = self._kommentar_krankheitstage.strip()
-            eintrag.anmerkung_kurz = self._kuerze_anmerkung(kuerzel) if kuerzel else None
-            return
-        if eintrag.ist_urlaub and self._sondertag_kommentar_erlaubt(eintrag.datum):
-            kuerzel = self._kommentar_urlaubstage.strip()
-            eintrag.anmerkung_kurz = self._kuerze_anmerkung(kuerzel) if kuerzel else None
-            return
-        eintrag.anmerkung_kurz = None
+                self._setze_urlaub_krank_kommentar_ohne_arbeitszeit(
+                    eintrag, self._kommentar_urlaubstage
+                )
 
     def _sondertag_kommentar_erlaubt(self, datum: date) -> bool:
         """Kuerzel im Kommentar nur Mo–Fr mit Vertrags-Soll > 0 (Urlaub/Krank)."""
@@ -420,6 +443,8 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
     def _berechne_geleistete_stunden_aus_zeiten(
         self, eintrag: ZeiteintragsDTO
     ) -> time | None:
+        if self._ist_ueberstunden_frei_zeitraum(eintrag):
+            return time(0, 0, 0)
         if not self._eintrag_hat_geleistete_arbeitszeit(eintrag):
             return None
         return self._sekunden_als_uhrzeit_fuer_dauer(
@@ -466,7 +491,9 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         if ist_urlaub or ist_krank:
             vertrag_soll = self._berechne_soll_stunden_nach_vertrag(eintraege[0].datum)
         for zeile_nr, eintrag in enumerate(eintraege, start=1):
-            if (ist_krank or ist_urlaub) and zeile_nr == 1:
+            if self._ist_ueberstunden_frei_zeitraum(eintrag):
+                eintrag.geleistete_stunden = time(0, 0, 0)
+            elif (ist_krank or ist_urlaub) and zeile_nr == 1:
                 eintrag.geleistete_stunden = (
                     self._berechne_geleistete_stunden_zeile_1_vertrag_plus_arbeit(
                         eintraege,

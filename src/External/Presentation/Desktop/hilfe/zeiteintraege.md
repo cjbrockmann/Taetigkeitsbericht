@@ -32,7 +32,7 @@ Dieses Fenster dient der **monatlichen Erfassung** Ihrer Arbeitszeiten. Die Tabe
 - **Geleistet**: Die **errechnete** Netto-Arbeitszeit aus Von/Bis minus Pausen (nur Anzeige, keine direkte Eingabe).
 - **Soll** und **Vertrag**: Anzeige der **Sollzeiten** nach Stundenplan bzw. nach vertraglicher Vorgabe (abhängig von Kalendertag und Konfiguration). Details variieren je nach Tag (z. B. Feiertag, Urlaub).
 - **Kommentar**: Freitext (begrenzte Länge), z. B. Tätigkeit oder Hinweise. Unter bestimmten Bedingungen kann der Eintrag **automatisch ergänzt** werden (z. B. Kennzeichen für Urlaub/Krankheit).
-- **Tag** (zweite Spalte mit diesem Namen), **Feiertagsname**, **Schulferienname**, **Anm.kurz**: Zusatzinformationen, teils für den Export nach Excel; Feiertags- und Feriennamen sowie der Kurzkommentar werden aus der Anwendungsschicht übernommen (nicht gespeichert).
+- **Tag** (zweite Spalte mit diesem Namen), **Feiertagsname**, **Schulferienname**: Zusatzinformationen, teils für den Export nach Excel; Feiertags- und Feriennamen werden aus der Anwendungsschicht übernommen (nicht gespeichert).
 
 Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zuletzt geladenen Stand ab.
 

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QStyle,
     QStyledItemDelegate,
@@ -413,6 +414,10 @@ class ZeiteintragWindow(QMainWindow):
         self._zeile_loeschen_button = QPushButton("Markierte Zeile(n) löschen", self)
         self._speichern_button = QPushButton("Alle Zeilen speichern", self)
         self._status_label = QLabel("Bereit.", self)
+        self._status_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self._status_label.setWordWrap(True)
         self._status_label_timer = QTimer(self)
         self._status_label_timer.setSingleShot(True)
         self._status_label_timer.setInterval(10_000)
@@ -483,9 +488,6 @@ class ZeiteintragWindow(QMainWindow):
         )
         horizontal_header.resizeSection(
             ZeiteintragSpalte.SCHULFERIENNAME, ZeiteintragSpalte.NAME_SPALTE_BREITE
-        )
-        horizontal_header.resizeSection(
-            ZeiteintragSpalte.ANMERKUNG_KURZ, ZeiteintragSpalte.KOMMENTAR_MIN_BREITE
         )
         self._table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         for spalte in self._ausgeblendete_spalten:
@@ -850,13 +852,15 @@ class ZeiteintragWindow(QMainWindow):
         self._capture_baseline()
         self._has_unsaved_changes = False
         self._view_model.table_model.set_dirty_rows(set())
-        self._reload_current_period()
+        self._reload_current_period(status_anzeigen=False)
 
-    def _reload_current_period(self) -> None:
+    def _reload_current_period(self, *, status_anzeigen: bool = True) -> None:
         selected_year, selected_month = self._selected_period()
         self._suspend_dirty_tracking = True
         try:
-            self._view_model.lade_zeitraum(selected_year, selected_month)
+            self._view_model.lade_zeitraum(
+                selected_year, selected_month, status_anzeigen=status_anzeigen
+            )
         finally:
             self._suspend_dirty_tracking = False
         self._current_loaded_year = selected_year
@@ -955,17 +959,8 @@ class ZeiteintragWindow(QMainWindow):
             return
         spalten = len(zeilen[0]) if zeilen else len(cfg.cell_spec)
         kopf_hinweis = " mit Kopfzeile" if cfg.include_header else ""
-        if hat_blank:
-            blank_hinweis = (
-                " MS Excel: blank-Spalten (Formeln) bleiben erhalten. "
-                "LibreOffice/OpenOffice Calc: nur tab-getrennt einfügen; "
-                "Formel-Spalten ggf. manuell schützen."
-            )
-        else:
-            blank_hinweis = ""
         self._set_status_text(
-            f"{n} Datenzeile(n){kopf_hinweis}, {spalten} Spalte(n) "
-            f"(cell_spec) kopiert.{blank_hinweis}"
+            f"{n} Datenzeile(n){kopf_hinweis}, {spalten} Spalte(n) kopiert."
         )
 
     def _kopiere_markierte_zellen_in_zwischenablage(self, silent: bool = False) -> None:
@@ -1003,7 +998,7 @@ class ZeiteintragWindow(QMainWindow):
             )
 
     def _on_table_double_clicked(self, index) -> None:
-        if index.column() != ZeiteintragSpalte.DATUM:
+        if index.column() not in (ZeiteintragSpalte.TAG, ZeiteintragSpalte.DATUM):
             return
         model = self._view_model.table_model
         row_idx = index.row()
@@ -1011,7 +1006,7 @@ class ZeiteintragWindow(QMainWindow):
         datum_text = row.datum.strip()
         if not datum_text:
             datum_text = date.today().strftime("%d.%m.%Y")
-            model.setData(index, datum_text)
+            model.setData(model.index(row_idx, ZeiteintragSpalte.DATUM), datum_text)
 
         try:
             datum = datetime.strptime(datum_text, "%d.%m.%Y").date()

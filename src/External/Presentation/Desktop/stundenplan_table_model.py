@@ -42,7 +42,7 @@ class StundenplanRow:
 
 class StundenplanTableModel(QAbstractTableModel):
     HEADERS = [
-        "Wochentag",
+        "Tag",
         "Von",
         "Bis",
         "Von",

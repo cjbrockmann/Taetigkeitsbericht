@@ -82,7 +82,10 @@ def _parse_cell_spec(raw: Any) -> tuple[int | None, ...]:
     return tuple(out)
 
 
-ZEITEINTRAG_SPALTEN_MAX: Final[int] = 20
+ZEITEINTRAG_SPALTEN_MAX: Final[int] = 19
+
+KOMMENTAR_URLAUB_KRANK_MODI: Final[frozenset[str]] = frozenset({"praefix", "kuerzel"})
+DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS: Final[str] = "praefix"
 STUNDENPLAN_SPALTEN_MAX: Final[int] = 8
 DEFAULT_ZEITEINTRAG_GRAUER_HINTERGRUND_SPALTEN: Final[tuple[int, ...]] = (2, 3, 4, 5, 6)
 
@@ -168,6 +171,7 @@ class AppConfig:
     sollstunden_an_feiertagen: bool = False
     kommentar_urlaubstage: str = ""
     kommentar_krankheitstage: str = ""
+    kommentar_urlaub_krank_modus: str = DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
     kommentar_ueberstunden_frei: str = ""
     zeiteintrag_ausgeblendete_spalten: tuple[int, ...] = ()
     zeiteintrag_grauer_hintergrund_spalten: tuple[int, ...] = (
@@ -306,6 +310,18 @@ def _section_kommentar_krankheitstage(data: dict[str, Any]) -> str:
     return str(wert).strip() if wert is not None else ""
 
 
+def _section_kommentar_urlaub_krank_modus(data: dict[str, Any]) -> str:
+    wert = _sollstunden_section(data).get(
+        "kommentar_urlaub_krank_modus", DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
+    )
+    modus = str(wert).strip().lower() if wert is not None else DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
+    if modus == "prefix":
+        modus = "praefix"
+    if modus not in KOMMENTAR_URLAUB_KRANK_MODI:
+        return "kuerzel"
+    return modus
+
+
 def _section_kommentar_ueberstunden_frei(data: dict[str, Any]) -> str:
     wert = _sollstunden_section(data).get("kommentar_ueberstunden_frei", "")
     return str(wert).strip() if wert is not None else ""
@@ -348,6 +364,7 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
         sollstunden_an_feiertagen=_section_sollstunden_an_feiertagen(data),
         kommentar_urlaubstage=_section_kommentar_urlaubstage(data),
         kommentar_krankheitstage=_section_kommentar_krankheitstage(data),
+        kommentar_urlaub_krank_modus=_section_kommentar_urlaub_krank_modus(data),
         kommentar_ueberstunden_frei=_section_kommentar_ueberstunden_frei(data),
         zeiteintrag_ausgeblendete_spalten=_section_zeiteintrag_ausgeblendete_spalten(data),
         zeiteintrag_grauer_hintergrund_spalten=_section_zeiteintrag_grauer_hintergrund_spalten(

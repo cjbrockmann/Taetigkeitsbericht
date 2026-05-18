@@ -127,11 +127,6 @@ class ZeiteintragsDTO(Zeiteintrag):
     ist_betriebsferien: bool = Field(description="Ist Betriebsferien", default=False) 
     feiertagsname: Optional[str] = Field(default=None, max_length=80, description="Name des Feiertags")
     schulferienname: Optional[str] = Field(default=None, max_length=80, description="Name der Schulferien")
-    anmerkung_kurz: Optional[str] = Field(
-        default=None,
-        max_length=80,
-        description="Kurzkommentar nur fuer Anzeige/Excel, nicht persistiert",
-    )
 
     @model_validator(mode="after")
     def pruefe_zeitraeume(self) -> "ZeiteintragsDTO":
