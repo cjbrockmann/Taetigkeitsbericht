@@ -119,3 +119,13 @@ def zeige_gemeinsame_markdown_hilfe(
     _gemeinsamer_hilfe_dialog.show()
     _gemeinsamer_hilfe_dialog.raise_()
     QTimer.singleShot(0, _gemeinsamer_hilfe_dialog.activateWindow)
+
+
+def schliesse_gemeinsame_markdown_hilfe() -> None:
+    """Schließt das app-weite Hilfefenster (z. B. beim Beenden des Hauptprogramms)."""
+    global _gemeinsamer_hilfe_dialog
+    if _gemeinsamer_hilfe_dialog is None:
+        return
+    _gemeinsamer_hilfe_dialog.close()
+    _gemeinsamer_hilfe_dialog.deleteLater()
+    _gemeinsamer_hilfe_dialog = None

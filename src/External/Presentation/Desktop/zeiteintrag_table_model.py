@@ -31,25 +31,51 @@ class ZeiteintragSpalte:
     TAG_EXCEL = 17
     FEIERTAGSNAME = 18
     SCHULFERIENNAME = 19
+    ANMERKUNG_KURZ = 20
 
     STATUS_KENNZEICHEN = frozenset(
         {URLAUB, KRANK, FEIERTAG_KZ, FERIEN, BETRIEBSFERIEN}
     )
     ZEITFELDER = frozenset({VON, BIS, PAUSE1_VON, PAUSE1_BIS, PAUSE2_VON, PAUSE2_BIS})
 
-    STATUS_SPALTE_BREITE = 28
     ZEIT_SPALTE_BREITE = 50
-    STATUS_ICON_RAND = 5
-    STATUS_ICON_MAX_GROESSE = 16
     KOMMENTAR_MIN_BREITE = 200
     NAME_SPALTE_BREITE = 120
 
+from Core.Domain.models.models_worktime import Feiertag
+from External.Presentation.Desktop.arbeitszeit_berechnung import (
+    minuten_als_hh_mm,
+    parse_uhrzeit_minuten,
+)
+from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
+from External.Presentation.Desktop.table_view_styles import (
+    DIRTY_ROW_TEXT_COLOR,
+    NORMAL_ROW_TEXT_COLOR,
+)
+
+# Gleicher Grauton wie Wochenendzeilen (siehe data(), Qt.BackgroundRole).
+ZEITEINTRAG_WOCHENENDE_HINTERGRUND = QColor("#eeeeee")
+ZEITEINTRAG_NORMALER_HINTERGRUND = QColor("#ffffff")
+
+# Status-Kennzeichen-Spalten F, U, K, Sf, Bf (Indizes 2–6): Spaltenbreite und Icon-Groesse.
+STATUS_KENNZEICHEN_SPALTE_BREITE = 28
+STATUS_KENNZEICHEN_ICON_RAND = 5
+STATUS_KENNZEICHEN_ICON_MAX_GROESSE = 16
+STATUS_KENNZEICHEN_ICON_MIN_GROESSE = 12
+STATUS_KENNZEICHEN_ICON_BUCHSTABEN_PIXEL = 10
+FEIERTAG_STERN_ICON_GROESSE = 16
+FEIERTAG_STERN_RADIUS_AUSSEN = 6.0
+FEIERTAG_STERN_RADIUS_INNEN = 2.4
+
+ZeiteintragSpalte.STATUS_SPALTE_BREITE = STATUS_KENNZEICHEN_SPALTE_BREITE
+ZeiteintragSpalte.STATUS_ICON_RAND = STATUS_KENNZEICHEN_ICON_RAND
+ZeiteintragSpalte.STATUS_ICON_MAX_GROESSE = STATUS_KENNZEICHEN_ICON_MAX_GROESSE
 
 _KENNZEICHEN_ICON_CACHE: dict[str, QIcon] = {}
 
 
 def _rundes_kennzeichen_icon(letter: str, hintergrund: str, vordergrund: str = "#ffffff") -> QIcon:
-    groesse = ZeiteintragSpalte.STATUS_ICON_MAX_GROESSE
+    groesse = STATUS_KENNZEICHEN_ICON_MAX_GROESSE
     schluessel = f"{letter}:{hintergrund}:{vordergrund}:{groesse}"
     if schluessel in _KENNZEICHEN_ICON_CACHE:
         return _KENNZEICHEN_ICON_CACHE[schluessel]
@@ -62,7 +88,7 @@ def _rundes_kennzeichen_icon(letter: str, hintergrund: str, vordergrund: str = "
     maler.drawEllipse(1, 1, groesse - 2, groesse - 2)
     font = QFont()
     font.setBold(True)
-    font.setPixelSize(10)
+    font.setPixelSize(STATUS_KENNZEICHEN_ICON_BUCHSTABEN_PIXEL)
     maler.setFont(font)
     maler.setPen(QPen(QColor(vordergrund)))
     maler.drawText(QRect(0, 0, groesse, groesse), Qt.AlignmentFlag.AlignCenter, letter)
@@ -87,33 +113,18 @@ def ferien_kennzeichen_icon() -> QIcon:
 def betriebsferien_kennzeichen_icon() -> QIcon:
     return _rundes_kennzeichen_icon("B", "#7b1fa2")
 
-from Core.Domain.models.models_worktime import Feiertag
-from External.Presentation.Desktop.arbeitszeit_berechnung import (
-    minuten_als_hh_mm,
-    parse_uhrzeit_minuten,
-)
-from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
-from External.Presentation.Desktop.table_view_styles import (
-    DIRTY_ROW_TEXT_COLOR,
-    NORMAL_ROW_TEXT_COLOR,
-)
-
-# Gleicher Grauton wie Wochenendzeilen (siehe data(), Qt.BackgroundRole).
-ZEITEINTRAG_WOCHENENDE_HINTERGRUND = QColor("#eeeeee")
-ZEITEINTRAG_NORMALER_HINTERGRUND = QColor("#ffffff")
-
 
 def feiertag_stern_icon() -> QIcon:
     if not hasattr(feiertag_stern_icon, "_cache"):
-        groesse = 16
+        groesse = FEIERTAG_STERN_ICON_GROESSE
         pm = QPixmap(groesse, groesse)
         pm.fill(QColor(0, 0, 0, 0))
         maler = QPainter(pm)
         maler.setRenderHint(QPainter.RenderHint.Antialiasing)
         mitte_x = groesse / 2
         mitte_y = groesse / 2 + 0.5
-        radius_aussen = 6.0
-        radius_innen = 2.4
+        radius_aussen = FEIERTAG_STERN_RADIUS_AUSSEN
+        radius_innen = FEIERTAG_STERN_RADIUS_INNEN
         punkte: list[QPointF] = []
         for k in range(10):
             winkel = math.pi / 2 + k * math.pi / 5
@@ -153,6 +164,7 @@ class ZeiteintragRow:
     ist_betriebsferien: bool = False
     feiertagsname: str = ""
     schulferienname: str = ""
+    anmerkung_kurz: str = ""
 
 
 class ZeiteintragTableModel(QAbstractTableModel):
@@ -179,6 +191,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Tag",
         "Feiertagsname",
         "Schulferienname",
+        "Anm.kurz",
     ]
     HEADER_TOOLTIPS = [
         "Wird automatisch aus dem Datum ermittelt",
@@ -201,6 +214,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Kalendertag als Text für Excel (z. B. 7.)",
         "Name des Feiertags",
         "Name der Schulferien",
+        "Kurzkommentar fuer Excel (nicht gespeichert, aus Anwendungsschicht)",
     ]
 
     def __init__(
@@ -354,6 +368,8 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 return row.feiertagsname
             case ZeiteintragSpalte.SCHULFERIENNAME:
                 return row.schulferienname
+            case ZeiteintragSpalte.ANMERKUNG_KURZ:
+                return row.anmerkung_kurz
             case _:
                 return None
 
@@ -391,6 +407,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 ZeiteintragSpalte.TAG_EXCEL,
                 ZeiteintragSpalte.FEIERTAGSNAME,
                 ZeiteintragSpalte.SCHULFERIENNAME,
+                ZeiteintragSpalte.ANMERKUNG_KURZ,
             }
         ):
             return False
@@ -447,6 +464,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 ZeiteintragSpalte.TAG_EXCEL,
                 ZeiteintragSpalte.FEIERTAGSNAME,
                 ZeiteintragSpalte.SCHULFERIENNAME,
+                ZeiteintragSpalte.ANMERKUNG_KURZ,
             }
         ):
             return Qt.ItemIsSelectable | Qt.ItemIsEnabled

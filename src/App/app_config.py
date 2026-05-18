@@ -82,7 +82,7 @@ def _parse_cell_spec(raw: Any) -> tuple[int | None, ...]:
     return tuple(out)
 
 
-ZEITEINTRAG_SPALTEN_MAX: Final[int] = 19
+ZEITEINTRAG_SPALTEN_MAX: Final[int] = 20
 STUNDENPLAN_SPALTEN_MAX: Final[int] = 8
 DEFAULT_ZEITEINTRAG_GRAUER_HINTERGRUND_SPALTEN: Final[tuple[int, ...]] = (2, 3, 4, 5, 6)
 

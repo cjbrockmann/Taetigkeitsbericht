@@ -48,8 +48,7 @@ from External.Presentation.Desktop.zeiteintrag_excel_clipboard import (
     ExcelZelltyp,
     cell_spec_hat_platzhalter,
     excel_zelltyp_fuer_spalte,
-    html_tabelle_fuer_excel,
-    tsv_zeile,
+    setze_excel_zwischenablage,
     zellenwerte_fuer_excel,
 )
 from External.Presentation.Desktop.feiertag_view import FeiertagView
@@ -61,10 +60,17 @@ from External.Presentation.Desktop.table_view_styles import (
     ZEITEINTRAG_TABLE_VIEW_STYLESHEET,
     paint_option_mit_zeilenfarbe,
 )
-from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
+from External.Presentation.Desktop.hilfe import (
+    ViewMarkdownHilfe,
+    schliesse_gemeinsame_markdown_hilfe,
+)
 from External.Presentation.Desktop.message_boxes import frage_ja_nein, warnung
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
 from External.Presentation.Desktop.zeiteintrag_table_model import (
+    STATUS_KENNZEICHEN_ICON_MAX_GROESSE,
+    STATUS_KENNZEICHEN_ICON_MIN_GROESSE,
+    STATUS_KENNZEICHEN_ICON_RAND,
+    STATUS_KENNZEICHEN_SPALTE_BREITE,
     ZeiteintragSpalte,
     ZeiteintragTableModel,
 )
@@ -219,11 +225,11 @@ class StatusKennzeichenDelegate(DirtyRowItemDelegate):
 
         icon = index.data(Qt.ItemDataRole.DecorationRole)
         if isinstance(icon, QIcon) and not icon.isNull():
-            rand = ZeiteintragSpalte.STATUS_ICON_RAND
+            rand = STATUS_KENNZEICHEN_ICON_RAND
             verfuegbar = min(option.rect.width(), option.rect.height())
             groesse = min(
-                ZeiteintragSpalte.STATUS_ICON_MAX_GROESSE,
-                max(12, verfuegbar - 2 * rand),
+                STATUS_KENNZEICHEN_ICON_MAX_GROESSE,
+                max(STATUS_KENNZEICHEN_ICON_MIN_GROESSE, verfuegbar - 2 * rand),
             )
             icon_rect = QRect(
                 option.rect.center().x() - groesse // 2,
@@ -392,10 +398,10 @@ class ZeiteintragWindow(QMainWindow):
         self._laden_button.setEnabled(False)
         self._excel_kopieren_button = QPushButton("Für Excel kopieren", self)
         self._excel_kopieren_button.setToolTip(
-            "Alle Datenzeilen tab-getrennt gemäß cell_spec in config.toml "
-            "(Reihenfolge und „blank“-Platzhalter). "
-            "Bei blank: in Excel „Leerzellen überspringen“ beim Einfügen. "
-            "Ausgeblendete Tabellenspalten können in cell_spec trotzdem genutzt werden."
+            "Kopiert alle Zeilen des Monats gemäß cell_spec (config.toml). "
+            "Nur Werte werden eingefügt — Rahmen und Format in Excel bleiben erhalten. "
+            "Spalten „blank“ (z. B. Geleistet/Soll) werden übersprungen. "
+            "In Excel mit Strg+V einfügen."
         )
         self._loesch_hinweis_label = QLabel(self)
         self._loesch_hinweis_label.setStyleSheet("color: red;")
@@ -462,7 +468,7 @@ class ZeiteintragWindow(QMainWindow):
         horizontal_header.resizeSection(ZeiteintragSpalte.TAG, 50)
         horizontal_header.resizeSection(ZeiteintragSpalte.DATUM, 88)
         for spalte in ZeiteintragSpalte.STATUS_KENNZEICHEN:
-            horizontal_header.resizeSection(spalte, ZeiteintragSpalte.STATUS_SPALTE_BREITE)
+            horizontal_header.resizeSection(spalte, STATUS_KENNZEICHEN_SPALTE_BREITE)
         for spalte in ZeiteintragSpalte.ZEITFELDER:
             horizontal_header.resizeSection(spalte, ZeiteintragSpalte.ZEIT_SPALTE_BREITE)
         horizontal_header.resizeSection(ZeiteintragSpalte.GELEISTET, 80)
@@ -477,6 +483,9 @@ class ZeiteintragWindow(QMainWindow):
         )
         horizontal_header.resizeSection(
             ZeiteintragSpalte.SCHULFERIENNAME, ZeiteintragSpalte.NAME_SPALTE_BREITE
+        )
+        horizontal_header.resizeSection(
+            ZeiteintragSpalte.ANMERKUNG_KURZ, ZeiteintragSpalte.KOMMENTAR_MIN_BREITE
         )
         self._table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         for spalte in self._ausgeblendete_spalten:
@@ -765,6 +774,7 @@ class ZeiteintragWindow(QMainWindow):
         for tab_index in range(self._tab_widget.count()):
             if self._tab_has_unsaved(tab_index):
                 self._tab_verwerfe_ungespeichert(tab_index)
+        schliesse_gemeinsame_markdown_hilfe()
         event.accept()
 
     def _load_selected_period(self) -> None:
@@ -915,7 +925,7 @@ class ZeiteintragWindow(QMainWindow):
         return zellen
 
     def _kopiere_tabelle_fuer_excel(self) -> None:
-        """TSV gemaess cell_spec; optional HTML fuer Excel-Zahlformate."""
+        """Alle Monatszeilen gemaess cell_spec; blank-Spalten ueberspringen, Rest ueberschreiben."""
         self._laden_excel_export_config()
         model = self._view_model.table_model
         parent = QModelIndex()
@@ -926,34 +936,36 @@ class ZeiteintragWindow(QMainWindow):
         n = model.rowCount(parent)
         for r in range(n):
             zeilen.append(self._excel_export_zeile(model, r, parent))
-        text = "\n".join(tsv_zeile(row) for row in zeilen)
         clipboard = QGuiApplication.clipboard()
         if clipboard is None:
             return
-        # HTML ueberschreibt leere Platzhalter in Excel; mit „blank“ nur TSV (Leerzellen ueberspringen).
-        html_aktiv = cfg.html_formatierung and not cell_spec_hat_platzhalter(cfg.cell_spec)
-        if html_aktiv:
-            html = html_tabelle_fuer_excel(
-                zeilen,
-                text_spalten=frozenset(cfg.text_spalten),
-                kopfzeile=cfg.include_header,
+        hat_blank = cell_spec_hat_platzhalter(cfg.cell_spec)
+        if not setze_excel_zwischenablage(
+            zeilen,
+            text_spalten=frozenset(cfg.text_spalten),
+            html_formatierung=cfg.html_formatierung,
+            mit_blank_ss_index=hat_blank,
+            kopfzeile=cfg.include_header,
+        ):
+            warnung(
+                self,
+                "Excel-Export",
+                "Die Zwischenablage konnte nicht vorbereitet werden.",
             )
-            mime = QMimeData()
-            mime.setText(text)
-            mime.setHtml(html)
-            clipboard.setMimeData(mime)
-        else:
-            clipboard.setText(text)
+            return
         spalten = len(zeilen[0]) if zeilen else len(cfg.cell_spec)
         kopf_hinweis = " mit Kopfzeile" if cfg.include_header else ""
-        platzhalter_hinweis = ""
-        if cell_spec_hat_platzhalter(cfg.cell_spec):
-            platzhalter_hinweis = (
-                " — in Excel mit Strg-V einfügen"
+        if hat_blank:
+            blank_hinweis = (
+                " MS Excel: blank-Spalten (Formeln) bleiben erhalten. "
+                "LibreOffice/OpenOffice Calc: nur tab-getrennt einfügen; "
+                "Formel-Spalten ggf. manuell schützen."
             )
+        else:
+            blank_hinweis = ""
         self._set_status_text(
             f"{n} Datenzeile(n){kopf_hinweis}, {spalten} Spalte(n) "
-            f"(cell_spec) kopiert.{platzhalter_hinweis}"
+            f"(cell_spec) kopiert.{blank_hinweis}"
         )
 
     def _kopiere_markierte_zellen_in_zwischenablage(self, silent: bool = False) -> None:

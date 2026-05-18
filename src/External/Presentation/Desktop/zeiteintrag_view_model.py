@@ -574,6 +574,7 @@ class ZeiteintragViewModel(QObject):
         row.ist_betriebsferien = eintrag.ist_betriebsferien
         row.feiertagsname = eintrag.feiertagsname or ""
         row.schulferienname = eintrag.schulferienname or ""
+        row.anmerkung_kurz = eintrag.anmerkung_kurz or ""
 
     @staticmethod
     def _map_to_row(eintrag: ZeiteintragsDTO) -> ZeiteintragRow:
@@ -604,4 +605,5 @@ class ZeiteintragViewModel(QObject):
             ist_betriebsferien=eintrag.ist_betriebsferien,
             feiertagsname=eintrag.feiertagsname or "",
             schulferienname=eintrag.schulferienname or "",
+            anmerkung_kurz=eintrag.anmerkung_kurz or "",
         )

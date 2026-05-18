@@ -133,6 +133,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         for eintrag in eintraege:
             self._initialisiere_dto(eintrag)
             self._wende_kommentar_regeln_an(eintrag)
+            self._setze_anmerkung_kurz(eintrag)
         self._setze_soll_felder_fuer_tag(eintraege)
         self._aktualisiere_geleistete_stunden_fuer_tag(eintraege)
 
@@ -309,6 +310,28 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
 
         if eintrag.ist_urlaub and self._sondertag_kommentar_erlaubt(eintrag.datum):
             self._wende_kommentar_praefix(eintrag, self._kommentar_urlaubstage, bestehend)
+
+    def _setze_anmerkung_kurz(self, eintrag: ZeiteintragsDTO) -> None:
+        """Kurzkommentar fuer Excel: nur Status-Kuerzel, ohne Freitext aus anmerkung."""
+        if self._ist_ueberstunden_frei_zeitraum(eintrag):
+            eintrag.anmerkung_kurz = self._kuerze_anmerkung(self._kommentar_ueberstunden_frei)
+            return
+        if eintrag.ist_feiertag:
+            name = (eintrag.feiertagsname or "").strip()
+            if name:
+                eintrag.anmerkung_kurz = self._kuerze_anmerkung(f"{name}")
+            else:
+                eintrag.anmerkung_kurz = "Feiertag: "
+            return
+        if eintrag.ist_krank and self._sondertag_kommentar_erlaubt(eintrag.datum):
+            kuerzel = self._kommentar_krankheitstage.strip()
+            eintrag.anmerkung_kurz = self._kuerze_anmerkung(kuerzel) if kuerzel else None
+            return
+        if eintrag.ist_urlaub and self._sondertag_kommentar_erlaubt(eintrag.datum):
+            kuerzel = self._kommentar_urlaubstage.strip()
+            eintrag.anmerkung_kurz = self._kuerze_anmerkung(kuerzel) if kuerzel else None
+            return
+        eintrag.anmerkung_kurz = None
 
     def _sondertag_kommentar_erlaubt(self, datum: date) -> bool:
         """Kuerzel im Kommentar nur Mo–Fr mit Vertrags-Soll > 0 (Urlaub/Krank)."""

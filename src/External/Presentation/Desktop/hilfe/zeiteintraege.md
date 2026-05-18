@@ -32,7 +32,7 @@ Dieses Fenster dient der **monatlichen Erfassung** Ihrer Arbeitszeiten. Die Tabe
 - **Geleistet**: Die **errechnete** Netto-Arbeitszeit aus Von/Bis minus Pausen (nur Anzeige, keine direkte Eingabe).
 - **Soll** und **Vertrag**: Anzeige der **Sollzeiten** nach Stundenplan bzw. nach vertraglicher Vorgabe (abhängig von Kalendertag und Konfiguration). Details variieren je nach Tag (z. B. Feiertag, Urlaub).
 - **Kommentar**: Freitext (begrenzte Länge), z. B. Tätigkeit oder Hinweise. Unter bestimmten Bedingungen kann der Eintrag **automatisch ergänzt** werden (z. B. Kennzeichen für Urlaub/Krankheit).
-- **Tag** (zweite Spalte mit diesem Namen), **Feiertagsname**, **Schulferienname**: Zusatzinformationen, teils für den Export nach Excel; Feiertags- und Feriennamen werden aus den Stammdaten übernommen.
+- **Tag** (zweite Spalte mit diesem Namen), **Feiertagsname**, **Schulferienname**, **Anm.kurz**: Zusatzinformationen, teils für den Export nach Excel; Feiertags- und Feriennamen sowie der Kurzkommentar werden aus der Anwendungsschicht übernommen (nicht gespeichert).
 
 Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zuletzt geladenen Stand ab.
 
@@ -49,8 +49,20 @@ Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zu
 
 ## Export nach Excel und Zwischenablage
 
-- **Empfohlen für Excel:** Verwenden Sie die Schaltfläche **„Für Excel kopieren“** in der Werkzeugleiste. So landen die Daten in der Zwischenablage genau in der **vorgesehenen Spaltenfolge** und im **richtigen Format** für Excel – unabhängig davon, welche Spalten in der Tabelle gerade sichtbar oder ausgeblendet sind. Anschließend in Excel **einfügen** (üblicherweise **Strg+V**).
-- **Strg+C** in der Tabelle kopiert nur den **aktuell markierten Zellbereich** wie in der Ansicht; Spaltenauswahl und Format entsprechen **nicht** dem Excel-Export. Nutzen Sie das höchstens für kurze Auszüge in andere Programme – für einen sauberen Monats-Export nach Excel sollten Sie **immer „Für Excel kopieren“** verwenden.
+- **Empfohlen:** Verwenden Sie die Schaltfläche **„Für Excel kopieren“** in der Werkzeugleiste. So landen **alle Tage des Monats** in der Zwischenablage in der **vorgesehenen Spaltenfolge** (laut `cell_spec` in `config.toml`) – unabhängig davon, welche Spalten in der Tabelle gerade sichtbar oder ausgeblendet sind. Anschließend in der Tabellenkalkulation **einfügen** (üblicherweise **Strg+V**).
+- **Strg+C** in der Tabelle kopiert nur den **aktuell markierten Zellbereich** wie in der Ansicht; Spaltenauswahl und Format entsprechen **nicht** dem Excel-Export. Nutzen Sie das höchstens für kurze Auszüge – für den Monats-Export sollten Sie **immer „Für Excel kopieren“** verwenden.
+
+### LibreOffice / OpenOffice Calc
+
+Calc liest das spezielle Excel-Zwischenablageformat (**XML Spreadsheet**) beim Einfügen **nicht**. Es wird **tab-getrennter Text** eingefügt. Dabei bleiben in Calc oft **alte Zellinhalte** stehen, wenn die App für einen Tag **keinen** Wert liefert (z. B. leeres Wochenende) – Calc überschreibt solche Zellen beim Einfügen **nicht** mit „leer“.
+
+**Praktischer Ablauf in Calc:** Markieren Sie in der Monatstabelle **zuerst genau den Bereich**, den Sie neu befüllen wollen (alle Zeilen und Spalten des Monats, die aus der App kommen sollen), **löschen** Sie diesen Bereich (Entf), und **fügen** Sie danach aus der Zwischenablage ein (**Strg+V**). So verschwinden alte Einträge an Tagen ohne neue Daten zuverlässig.
+
+Spalten mit **Formeln** in Ihrer Calc-Datei (z. B. Geleistet/Soll, in der Konfiguration als `"blank"` markiert) werden beim tab-getrennten Einfügen **mit erfasst**; schützen Sie sie ggf. durch die Auswahl beim Löschen/Einfügen oder stellen Sie Formeln danach wieder her.
+
+### Microsoft Excel
+
+Unter **Microsoft Excel** kann das Einfügen anders reagieren (u. a. über das Format **XML Spreadsheet**): Leere exportierte Felder werden dort oft **direkt** als leere Zellen übernommen, und in `config.toml` als `"blank"` gekennzeichnete Spalten sollen **nicht** überschrieben werden (Formeln bleiben erhalten). Ob Sie in Excel **denselben** Schritt „Bereich vorher löschen“ brauchen, hängt von Ihrer Vorlage ab – wenn nach dem Einfügen noch alte Werte an leeren Tagen stehen, löschen Sie den Zielbereich wie in Calc **vor** dem Einfügen und fügen Sie erneut ein.
 
 ---
 

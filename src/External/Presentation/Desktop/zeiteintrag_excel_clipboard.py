@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
 from html import escape
+from xml.sax.saxutils import escape as xml_escape
 
 from External.Presentation.Desktop.arbeitszeit_berechnung import zeit_aus_text
 
@@ -23,7 +25,7 @@ class ExcelZelltyp(str, Enum):
     DATUM = "datum"
     INTEGER = "integer"
     FLOAT = "float"
-    BLANK = "blank"  # cell_spec „blank“: Platzhalter, Excel-Zelle nicht ueberschreiben
+    BLANK = "blank"  # cell_spec „blank“: Spalte beim Einfuegen nicht ueberschreiben (SpreadsheetML)
 
 
 @dataclass(frozen=True)
@@ -216,3 +218,170 @@ def html_tabelle_fuer_excel(
 
 def tsv_zeile(zeilen_zellen: list[ExcelExportZelle]) -> str:
     return "\t".join(z.text for z in zeilen_zellen)
+
+
+def _export_zelle_hat_inhalt(zelle: ExcelExportZelle) -> bool:
+    if zelle.typ == ExcelZelltyp.BLANK:
+        return False
+    return bool(zelle.text.strip() or zelle.anzeige.strip())
+
+
+def _spreadsheetml_datentyp_und_wert(
+    zelle: ExcelExportZelle, *, text_spalten: frozenset[int]
+) -> tuple[str, str] | None:
+    """(data_type, wert) oder None bei BLANK. Keine Styles — Excel-Rahmen bleiben erhalten."""
+    if zelle.typ == ExcelZelltyp.BLANK:
+        return None
+    if zelle.quell_spalte in text_spalten or zelle.typ == ExcelZelltyp.TEXT:
+        return "String", "" if not _export_zelle_hat_inhalt(zelle) else zelle.anzeige
+    if not _export_zelle_hat_inhalt(zelle):
+        return "String", ""
+    match zelle.typ:
+        case ExcelZelltyp.UHRZEIT | ExcelZelltyp.DATUM | ExcelZelltyp.FLOAT:
+            serial = zelle.text.strip().replace(",", ".")
+            return "Number", serial
+        case ExcelZelltyp.INTEGER:
+            return "Number", zelle.text.strip()
+        case _:
+            return "String", zelle.anzeige
+
+
+def _spreadsheetml_cell_xml(
+    spalte: int, zelle: ExcelExportZelle, *, text_spalten: frozenset[int]
+) -> str | None:
+    """Eine Zelle fuer SpreadsheetML; None = BLANK (Spalte ueberspringen)."""
+    daten = _spreadsheetml_datentyp_und_wert(zelle, text_spalten=text_spalten)
+    if daten is None:
+        return None
+    typ, wert = daten
+    return (
+        f'<Cell ss:Index="{spalte}"><Data ss:Type="{typ}">'
+        f"{xml_escape(wert)}</Data></Cell>"
+    )
+
+
+def _spreadsheetml_spaltenanzahl(zeilen: list[list[ExcelExportZelle]]) -> int:
+    if not zeilen:
+        return 1
+    return max(len(zellen) for zellen in zeilen)
+
+
+def spreadsheetml_aus_excel_zeilen(
+    zeilen: list[list[ExcelExportZelle]],
+    *,
+    text_spalten: frozenset[int],
+) -> str:
+    """Excel-XML mit ss:Index: BLANK-Spalten fehlen, nur Werte (ohne Zellstyles)."""
+    zeilen_xml: list[str] = []
+    for zellen in zeilen:
+        zellen_xml: list[str] = []
+        spalte = 1
+        for zelle in zellen:
+            zell_xml = _spreadsheetml_cell_xml(spalte, zelle, text_spalten=text_spalten)
+            if zell_xml is None:
+                if zelle.typ == ExcelZelltyp.BLANK:
+                    spalte += 1
+                continue
+            zellen_xml.append(zell_xml)
+            spalte += 1
+        zeilen_xml.append(f"<Row>{''.join(zellen_xml)}</Row>")
+    spalten = _spreadsheetml_spaltenanzahl(zeilen)
+    zeilen_anzahl = len(zeilen)
+    return (
+        '<?xml version="1.0"?>\n'
+        '<?mso-application progid="Excel.Sheet"?>\n'
+        '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n'
+        ' xmlns:o="urn:schemas-microsoft-com:office:office"\n'
+        ' xmlns:x="urn:schemas-microsoft-com:office:excel"\n'
+        ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"\n'
+        ' xmlns:html="http://www.w3.org/TR/REC-html40">\n'
+        '<Worksheet ss:Name="Zeiteintraege">\n'
+        f'<Table ss:ExpandedColumnCount="{spalten}" ss:ExpandedRowCount="{zeilen_anzahl}">\n'
+        f"{''.join(zeilen_xml)}\n"
+        "</Table></Worksheet></Workbook>"
+    )
+
+
+def _windows_zwischenablage_xml_spreadsheet_hinzufuegen(xml: str) -> bool:
+    """
+    Format „XML Spreadsheet“ zur bestehenden Zwischenablage hinzufuegen (ohne EmptyClipboard).
+    So bleiben TSV/HTML von Qt erhalten (LibreOffice/OpenOffice Calc) und Excel kann ss:Index nutzen.
+    """
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    gmem_moveable = 0x0002
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    fmt = user32.RegisterClipboardFormatW("XML Spreadsheet")
+    if fmt == 0:
+        return False
+
+    payload = xml.encode("utf-8")
+    if not user32.OpenClipboard(None):
+        return False
+    try:
+        h_mem = kernel32.GlobalAlloc(gmem_moveable, len(payload))
+        if not h_mem:
+            return False
+        ptr = kernel32.GlobalLock(h_mem)
+        if not ptr:
+            kernel32.GlobalFree(h_mem)
+            return False
+        ctypes.memmove(ptr, payload, len(payload))
+        kernel32.GlobalUnlock(h_mem)
+        if not user32.SetClipboardData(fmt, h_mem):
+            kernel32.GlobalFree(h_mem)
+            return False
+        return True
+    finally:
+        user32.CloseClipboard()
+
+
+def setze_excel_zwischenablage(
+    zeilen: list[list[ExcelExportZelle]],
+    *,
+    text_spalten: frozenset[int],
+    html_formatierung: bool,
+    mit_blank_ss_index: bool,
+    kopfzeile: bool = False,
+) -> bool:
+    """
+    Zwischenablage fuer Excel und LibreOffice/OpenOffice Calc.
+
+    Immer text/plain (TSV): Calc/Excel koennen einfuegen; leere Felder loeschen Zielzellen.
+    Bei mit_blank_ss_index zusaetzlich SpreadsheetML (ss:Index): blank-Spalten in MS Excel
+    unveraendert; kein HTML (wuerde alle Spalten ueberschreiben und Formate loeschen).
+    """
+    from PySide6.QtCore import QByteArray, QMimeData
+    from PySide6.QtGui import QGuiApplication
+
+    tsv = "\n".join(tsv_zeile(row) for row in zeilen)
+    mime = QMimeData()
+    mime.setText(tsv)
+
+    if html_formatierung and not mit_blank_ss_index:
+        mime.setHtml(
+            html_tabelle_fuer_excel(
+                zeilen,
+                text_spalten=text_spalten,
+                kopfzeile=kopfzeile,
+            )
+        )
+
+    xml: str | None = None
+    if mit_blank_ss_index:
+        xml = spreadsheetml_aus_excel_zeilen(zeilen, text_spalten=text_spalten)
+        raw = QByteArray(xml.encode("utf-8"))
+        for name in ("XML Spreadsheet", "application/vnd.ms-excel", "text/xml"):
+            mime.setData(name, raw)
+
+    cb = QGuiApplication.clipboard()
+    if cb is None:
+        return False
+    cb.setMimeData(mime)
+    if xml is not None:
+        _windows_zwischenablage_xml_spreadsheet_hinzufuegen(xml)
+    return cb.mimeData() is not None
