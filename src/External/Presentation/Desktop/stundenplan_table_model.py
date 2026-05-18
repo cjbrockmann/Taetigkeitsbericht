@@ -105,7 +105,7 @@ class StundenplanTableModel(QAbstractTableModel):
         if orientation == Qt.Vertical and role == Qt.DisplayRole:
             if section >= len(self._rows):
                 return None
-            return str(section + 1)
+            return f"{section + 1:02d}"
         return None
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> str | QColor | int | None:

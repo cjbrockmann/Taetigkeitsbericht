@@ -32,6 +32,7 @@ from External.Presentation.Desktop.form_bearbeitung_dirty import (
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
     STANDARD_TABLE_VIEW_STYLESHEET,
+    apply_rowcounter_color_to_table,
 )
 
 
@@ -48,6 +49,9 @@ class BetriebsferienView(QWidget):
         self._build_ui()
         self._bind_view_model()
         self._reset_formular_defaults()
+
+    def set_rowcounter_color(self, color: str) -> None:
+        apply_rowcounter_color_to_table(self._table, color)
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
@@ -158,6 +162,7 @@ class BetriebsferienView(QWidget):
         header.resizeSection(1, 95)
         header.resizeSection(2, 160)
         header.setStretchLastSection(True)
+        self._table.verticalHeader().setVisible(True)
 
         self._status_label = QLabel("Bereit.", self)
         self._markdown_hilfe = ViewMarkdownHilfe(

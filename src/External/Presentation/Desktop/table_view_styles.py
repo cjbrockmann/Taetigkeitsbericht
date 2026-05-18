@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem
+from PySide6.QtGui import QColor, QFont, QPalette
+from PySide6.QtWidgets import (
+    QHeaderView,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+    QTabWidget,
+    QTableView,
+)
 
 DIRTY_ROW_TEXT_COLOR = "#c62828"
 NORMAL_ROW_TEXT_COLOR = "#000000"
@@ -29,6 +35,44 @@ STANDARD_TABLE_VIEW_STYLESHEET = (
 )
 
 ZEITEINTRAG_TABLE_VIEW_STYLESHEET = STANDARD_TABLE_VIEW_STYLESHEET
+
+TAB_WIDGET_STYLESHEET = (
+    "QTabBar::tab {"
+    "color: #141414;"
+    "font-weight: 600;"
+    "}"
+    "QTabBar::tab:selected {"
+    "color: #000000;"
+    "font-weight: 700;"
+    "}"
+)
+
+
+def apply_rowcounter_color_to_vertical_header(
+    vertical_header: QHeaderView, color: str
+) -> None:
+    """Schriftfarbe der Zeilennummern (vertikaler Tabellenkopf)."""
+    vertical_header.setStyleSheet(
+        f"QHeaderView::section {{ color: {color}; font-weight: bold; }}"
+    )
+
+
+def apply_rowcounter_color_to_table(table: QTableView, color: str) -> None:
+    apply_rowcounter_color_to_vertical_header(table.verticalHeader(), color)
+
+
+def style_tab_widget(tab_widget: QTabWidget) -> None:
+    """Tab-Leiste: markantere und etwas groessere Beschriftung (Rahmen vom Systemstil)."""
+    tab_widget.setStyleSheet(TAB_WIDGET_STYLESHEET)
+    tab_bar = tab_widget.tabBar()
+    font = QFont(tab_bar.font())
+    point_size = font.pointSize()
+    if point_size > 0:
+        font.setPointSize(point_size + 1)
+    else:
+        font.setPixelSize(max(1, int(font.pixelSize() * 1.08)))
+    font.setWeight(QFont.Weight.DemiBold)
+    tab_bar.setFont(font)
 
 
 def paint_option_mit_zeilenfarbe(

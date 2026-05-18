@@ -20,6 +20,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QFrame,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -40,9 +41,11 @@ from PySide6.QtWidgets import (
 )
 
 from App.app_config import (
+    Mandant,
     ZeiteintragExcelExportSettings,
     load_zeiteintrag_excel_export_settings,
 )
+from External.Presentation.Desktop.mandant_auswahl import MandantAuswahl
 from External.Presentation.Desktop.betriebsferien_view import BetriebsferienView
 from External.Presentation.Desktop.zeiteintrag_excel_clipboard import (
     ExcelExportZelle,
@@ -59,7 +62,9 @@ from External.Presentation.Desktop.stundenplan_view import StundenplanView
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
     ZEITEINTRAG_TABLE_VIEW_STYLESHEET,
+    apply_rowcounter_color_to_table,
     paint_option_mit_zeilenfarbe,
+    style_tab_widget,
 )
 from External.Presentation.Desktop.hilfe import (
     ViewMarkdownHilfe,
@@ -337,6 +342,9 @@ class GruppenHeaderView(QHeaderView):
 
 
 class ZeiteintragWindow(QMainWindow):
+    _CONTAINER_GRUPPE_BREITE = 300
+    _CONTAINER_GRUPPE_HOEHE = 30
+
     _TAB_ZEITEINTRAEGE = 0
     _TAB_STUNDENPLAN = 1
     _TAB_URLAUB = 2
@@ -354,10 +362,12 @@ class ZeiteintragWindow(QMainWindow):
         krankmeldung_view: KrankmeldungView,
         betriebsferien_view: BetriebsferienView,
         schulferien_view: SchulferienView,
+        mandant_auswahl: MandantAuswahl,
         excel_export: ZeiteintragExcelExportSettings | None = None,
         ausgeblendete_spalten: Sequence[int] | None = None,
     ) -> None:
         super().__init__()
+        self._mandant_auswahl = mandant_auswahl
         self._view_model = view_model
         self._stundenplan_view = stundenplan_view
         self._feiertag_view = feiertag_view
@@ -380,6 +390,148 @@ class ZeiteintragWindow(QMainWindow):
         self._build_ui()
         self._bind_view_model()
         self._load_selected_period()
+
+    def _erzeuge_container_gruppe(self) -> QFrame:
+        """Rahmen ueber allen Tabs mit Mandantenauswahl."""
+        rahmen = QFrame(self)
+        rahmen.setObjectName("container_gruppe")
+        rahmen.setFixedSize(self._CONTAINER_GRUPPE_BREITE, self._CONTAINER_GRUPPE_HOEHE)
+        rahmen.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        rahmen.setAutoFillBackground(False)
+        rahmen.setStyleSheet(
+            "QFrame#container_gruppe {"
+            " border: 1px solid black;"
+            " border-radius: 6px;"
+            " background-color: transparent;"
+            " }"
+        )
+
+        innen = QHBoxLayout(rahmen)
+        innen.setContentsMargins(6, 2, 6, 2)
+        innen.setSpacing(6)
+
+        label = QLabel("Mandant:", rahmen)
+        label.setStyleSheet("QLabel { background-color: transparent; border: none; }")
+
+        self._mandant_combo_rahmen = QFrame(rahmen)
+        self._mandant_combo_rahmen.setObjectName("mandant_combo_rahmen")
+        self._mandant_combo_rahmen.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        combo_zeile = QHBoxLayout(self._mandant_combo_rahmen)
+        combo_zeile.setContentsMargins(4, 0, 2, 0)
+        combo_zeile.setSpacing(0)
+
+        self._mandant_combo = QComboBox(self._mandant_combo_rahmen)
+        self._mandant_pfeil_label = QLabel("▼", self._mandant_combo_rahmen)
+        self._mandant_pfeil_label.setFixedWidth(16)
+        self._mandant_pfeil_label.setAlignment(
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._mandant_pfeil_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._mandant_pfeil_label.installEventFilter(self)
+
+        for mandant in self._mandant_auswahl.mandanten:
+            self._mandant_combo.addItem(mandant.name, mandant.id)
+            self._setze_mandant_combo_eintrag_farben_in_combo(
+                self._mandant_combo,
+                self._mandant_combo.count() - 1,
+                mandant,
+            )
+        start = self._mandant_combo.findData(self._mandant_auswahl.mandant_id)
+        if start >= 0:
+            self._mandant_combo.setCurrentIndex(start)
+        self._wende_mandant_combo_farben(self._mandant_auswahl.aktueller_mandant())
+        self._mandant_combo.currentIndexChanged.connect(self._on_mandant_combo_changed)
+        self._mandant_auswahl.mandant_id_geaendert.connect(self._sync_mandant_combo)
+        self._mandant_auswahl.mandant_id_geaendert.connect(self._on_mandant_id_geaendert)
+
+        combo_zeile.addWidget(self._mandant_combo, 1)
+        combo_zeile.addWidget(self._mandant_pfeil_label)
+
+        innen.addWidget(label)
+        innen.addWidget(self._mandant_combo_rahmen, 1)
+        return rahmen
+
+    def _setze_mandant_combo_eintrag_farben_in_combo(
+        self, combo: QComboBox, index: int, mandant: Mandant
+    ) -> None:
+        model = combo.model()
+        model_index = model.index(index, 0)
+        model.setData(
+            model_index,
+            QColor(mandant.foreground_color),
+            Qt.ItemDataRole.ForegroundRole,
+        )
+        model.setData(
+            model_index,
+            QColor(mandant.background_color),
+            Qt.ItemDataRole.BackgroundRole,
+        )
+
+    def _wende_mandant_combo_farben(self, mandant: Mandant) -> None:
+        fg = QColor(mandant.foreground_color).name(QColor.NameFormat.HexRgb)
+        bg = mandant.background_color
+        self._mandant_combo_rahmen.setStyleSheet(
+            f"QFrame#mandant_combo_rahmen {{"
+            f" color: {fg};"
+            f" background-color: {bg};"
+            " border: 1px solid black;"
+            " border-radius: 4px;"
+            " }"
+        )
+        self._mandant_combo.setStyleSheet(
+            f"QComboBox {{"
+            f" color: {fg};"
+            f" background-color: {bg};"
+            " border: none;"
+            " padding: 1px 2px 1px 4px;"
+            " }"
+            " QComboBox::drop-down {"
+            " width: 0;"
+            " border: none;"
+            " }"
+            " QComboBox::down-arrow {"
+            " image: none;"
+            " width: 0;"
+            " height: 0;"
+            " }"
+        )
+        pfeil_font = self._mandant_pfeil_label.font()
+        pfeil_font.setBold(True)
+        pfeil_font.setPointSize(11)
+        self._mandant_pfeil_label.setFont(pfeil_font)
+        self._mandant_pfeil_label.setStyleSheet(
+            f"QLabel {{ color: {fg}; background-color: transparent; border: none; }}"
+        )
+        self._wende_mandant_rowcounter_farben(mandant)
+
+    def _wende_mandant_rowcounter_farben(self, mandant: Mandant) -> None:
+        farbe = mandant.rowcounter_color
+        apply_rowcounter_color_to_table(self._table, farbe)
+        self._stundenplan_view.set_rowcounter_color(farbe)
+        self._betriebsferien_view.set_rowcounter_color(farbe)
+
+    def _on_mandant_combo_changed(self, index: int) -> None:
+        if index < 0:
+            return
+        mandant_id = self._mandant_combo.itemData(index)
+        if mandant_id is None:
+            return
+        self._mandant_auswahl.set_mandant_id(int(mandant_id))
+        self._wende_mandant_combo_farben(self._mandant_auswahl.aktueller_mandant())
+
+    def _sync_mandant_combo(self, mandant_id: int) -> None:
+        index = self._mandant_combo.findData(mandant_id)
+        if index < 0:
+            return
+        if self._mandant_combo.currentIndex() != index:
+            self._mandant_combo.blockSignals(True)
+            self._mandant_combo.setCurrentIndex(index)
+            self._mandant_combo.blockSignals(False)
+        mandant = self._mandant_auswahl.aktueller_mandant()
+        self._wende_mandant_combo_farben(mandant)
+
+    def _on_mandant_id_geaendert(self, _mandant_id: int) -> None:
+        self._wende_mandant_rowcounter_farben(self._mandant_auswahl.aktueller_mandant())
 
     def _build_ui(self) -> None:
         zeiteintrag_widget = QWidget(self)
@@ -511,6 +663,7 @@ class ZeiteintragWindow(QMainWindow):
         root_layout.addLayout(fuss_layout)
 
         self._tab_widget = QTabWidget(self)
+        style_tab_widget(self._tab_widget)
         self._tab_widget.addTab(zeiteintrag_widget, "Zeiteinträge")
         self._tab_widget.addTab(self._stundenplan_view, "Stundenplan")
         self._tab_widget.addTab(self._urlaubsantrag_view, "Urlaub")
@@ -518,7 +671,20 @@ class ZeiteintragWindow(QMainWindow):
         self._tab_widget.addTab(self._feiertag_view, "Feiertage")
         self._tab_widget.addTab(self._betriebsferien_view, "Betriebsferien")
         self._tab_widget.addTab(self._schulferien_view, "Schulferien")
-        self.setCentralWidget(self._tab_widget)
+
+        self._container_gruppe = self._erzeuge_container_gruppe()
+        central = QWidget(self)
+        central_layout = QVBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(4)
+        container_zeile = QHBoxLayout()
+        container_zeile.setContentsMargins(10, 4, 0, 0)
+        container_zeile.addWidget(self._container_gruppe)
+        container_zeile.addStretch(1)
+        central_layout.addLayout(container_zeile)
+        central_layout.addWidget(self._tab_widget, 1)
+        self.setCentralWidget(central)
+
         self._tab_widget.tabBar().installEventFilter(self)
         self._tab_widget.currentChanged.connect(self._on_tab_current_changed)
 
@@ -713,6 +879,14 @@ class ZeiteintragWindow(QMainWindow):
         return True
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if watched is getattr(self, "_mandant_pfeil_label", None):
+            if event.type() == QEvent.Type.MouseButtonPress:
+                mouse = event
+                if isinstance(mouse, QMouseEvent) and mouse.button() == Qt.MouseButton.LeftButton:
+                    self._mandant_combo.showPopup()
+                    return True
+            return super().eventFilter(watched, event)
+
         tab_bar = self._tab_widget.tabBar()
         if watched is tab_bar:
             if event.type() == QEvent.Type.MouseButtonPress:

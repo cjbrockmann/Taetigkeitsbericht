@@ -7,7 +7,11 @@ version = "1.0.0"
 type = "sqlite"
 path = "taetigkeitsbericht.db"
 
-
+[mandanten] 
+mandanten = [
+    { name = "Bonifatius", id = 1, foreground_color = "#FFFFFF", background_color = "#5A62C8", rowcounter_color = "#0000AA" },
+    { name = "Frauenstein", id = 2, foreground_color = "#FFFFFF", background_color = "#C05858", rowcounter_color = "#AA0000" },
+]
 
 [sollstunden]
 wochenstunden = [

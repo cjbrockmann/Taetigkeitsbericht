@@ -56,7 +56,7 @@ class BetriebsferienTableModel(DirtyRowTableModelMixin, QAbstractTableModel):
             if 0 <= section < len(self.HEADERS):
                 return self.HEADERS[section]
         if role == Qt.DisplayRole and orientation == Qt.Vertical:
-            return str(section + 1)
+            return f"{section + 1:02d}"
         return None
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole) -> str | QColor | None:

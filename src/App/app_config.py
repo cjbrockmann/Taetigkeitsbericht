@@ -126,6 +126,15 @@ def _parse_ausgeblendete_spalten(
 
 
 @dataclass(frozen=True)
+class Mandant:
+    name: str
+    id: int
+    foreground_color: str = "#000000"
+    background_color: str = "#FFFFFF"
+    rowcounter_color: str = "#000000"
+
+
+@dataclass(frozen=True)
 class ZeiteintragExcelExportSettings:
     """Einstellungen fuer „Fuer Excel kopieren“ (TSV + HTML in Zwischenablage)."""
 
@@ -163,10 +172,56 @@ class ZeiteintragExcelExportSettings:
                     )
 
 
+def _parse_farbwert(wert: Any, pfad: str) -> str:
+    text = str(wert).strip()
+    if not text.startswith("#") or len(text) not in (4, 7, 9):
+        raise ValueError(f"{pfad}: Farbe muss als Hex (#RGB oder #RRGGBB) angegeben sein.")
+    return text
+
+
+def _section_mandanten(data: dict[str, Any]) -> tuple[Mandant, ...]:
+    sec = data.get("mandanten")
+    if sec is None:
+        return ()
+    if not isinstance(sec, dict):
+        raise TypeError("[mandanten] muss eine Tabelle sein.")
+    raw = sec.get("mandanten")
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise TypeError("[mandanten].mandanten muss eine Liste sein.")
+    mandanten: list[Mandant] = []
+    ids: set[int] = set()
+    for idx, eintrag in enumerate(raw, start=1):
+        if not isinstance(eintrag, dict):
+            raise TypeError(f"mandanten.mandanten[{idx}] muss eine Tabelle sein.")
+        pfad = f"mandanten.mandanten[{idx}]"
+        if "name" not in eintrag or "id" not in eintrag:
+            raise ValueError(f"{pfad}: name und id sind Pflichtfelder.")
+        mandant_id = int(eintrag["id"])
+        if mandant_id in ids:
+            raise ValueError(f"{pfad}: id {mandant_id} ist bereits vergeben.")
+        ids.add(mandant_id)
+        fg_roh = eintrag.get("foreground_color", eintrag.get("farbe", "#000000"))
+        bg_roh = eintrag.get("background_color", eintrag.get("hintergrundfarbe", "#FFFFFF"))
+        rc_roh = eintrag.get("rowcounter_color", eintrag.get("zeilenzaehlerfarbe", "#000000"))
+        mandanten.append(
+            Mandant(
+                name=str(eintrag["name"]).strip(),
+                id=mandant_id,
+                foreground_color=_parse_farbwert(fg_roh, f"{pfad}.foreground_color"),
+                background_color=_parse_farbwert(bg_roh, f"{pfad}.background_color"),
+                rowcounter_color=_parse_farbwert(rc_roh, f"{pfad}.rowcounter_color"),
+            )
+        )
+    return tuple(mandanten)
+
+
 @dataclass(frozen=True)
 class AppConfig:
     name: str = "Taetigkeitsbericht"
     version: str = "0.0.0"
+    mandanten: tuple[Mandant, ...] = ()
     soll_nach_vertrag_nach_wochentag: dict[int, str] = field(default_factory=dict)
     sollstunden_an_feiertagen: bool = False
     kommentar_urlaubstage: str = ""
@@ -360,6 +415,7 @@ def load_app_config(config_path: Path | None = None) -> AppConfig:
     return AppConfig(
         name=str(data.get("name", "Taetigkeitsbericht")),
         version=str(data.get("version", "0.0.0")),
+        mandanten=_section_mandanten(data),
         soll_nach_vertrag_nach_wochentag=_section_soll_nach_vertrag(data),
         sollstunden_an_feiertagen=_section_sollstunden_an_feiertagen(data),
         kommentar_urlaubstage=_section_kommentar_urlaubstage(data),

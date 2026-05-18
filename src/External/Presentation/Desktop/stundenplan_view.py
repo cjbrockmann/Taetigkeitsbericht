@@ -29,6 +29,7 @@ from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
 from External.Presentation.Desktop.message_boxes import warnung
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
 from External.Presentation.Desktop.table_view_styles import (
+    apply_rowcounter_color_to_table,
     DirtyRowItemDelegate,
     STANDARD_TABLE_VIEW_STYLESHEET,
 )
@@ -183,6 +184,9 @@ class StundenplanView(QWidget):
     @property
     def has_unsaved_changes(self) -> bool:
         return self._has_unsaved_changes
+
+    def set_rowcounter_color(self, color: str) -> None:
+        apply_rowcounter_color_to_table(self._table, color)
 
     def verwerfe_ungespeicherte_aenderungen(self) -> None:
         self._lade_alle()

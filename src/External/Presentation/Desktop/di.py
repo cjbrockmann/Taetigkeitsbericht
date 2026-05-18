@@ -24,11 +24,17 @@ from External.Presentation.Desktop.schulferien_view import SchulferienView
 from External.Presentation.Desktop.schulferien_view_model import SchulferienViewModel
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
 from External.Presentation.Desktop.urlaubsantrag_view_model import UrlaubsantragViewModel
+from External.Presentation.Desktop.mandant_auswahl import MandantAuswahl
 from External.Presentation.Desktop.zeiteintrag_view_model import ZeiteintragViewModel
 from External.Presentation.Desktop.zeiteintrag_window import ZeiteintragWindow
 
 
 class DesktopPresentationDIModule(Module):
+    @singleton
+    @provider
+    def provide_mandant_auswahl(self, app_config: AppConfig) -> MandantAuswahl:
+        return MandantAuswahl(app_config.mandanten)
+
     @singleton
     @provider
     def provide_feiertag_registry(self) -> FeiertagRegistry:
@@ -154,6 +160,7 @@ class DesktopPresentationDIModule(Module):
         krankmeldung_view: KrankmeldungView,
         betriebsferien_view: BetriebsferienView,
         schulferien_view: SchulferienView,
+        mandant_auswahl: MandantAuswahl,
         app_config: AppConfig,
     ) -> ZeiteintragWindow:
         return ZeiteintragWindow(
@@ -164,6 +171,7 @@ class DesktopPresentationDIModule(Module):
             krankmeldung_view,
             betriebsferien_view,
             schulferien_view,
+            mandant_auswahl=mandant_auswahl,
             excel_export=app_config.zeiteintrag_excel_export,
             ausgeblendete_spalten=app_config.zeiteintrag_ausgeblendete_spalten,
         )
