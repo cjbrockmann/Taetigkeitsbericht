@@ -664,11 +664,11 @@ class ZeiteintragWindow(QMainWindow):
 
         toolbar_layout.addWidget(self._jahr_spin)
         toolbar_layout.addWidget(self._monat_combo)
-        toolbar_layout.addWidget(self._laden_button)
         toolbar_layout.addWidget(self._excel_kopieren_button)
         toolbar_layout.addStretch(1)
         toolbar_layout.addWidget(self._loesch_hinweis_label)
         toolbar_layout.addStretch(1)
+        toolbar_layout.addWidget(self._laden_button)
         toolbar_layout.addWidget(self._zeile_hinzufuegen_button)
         toolbar_layout.addWidget(self._zeile_loeschen_button)
         toolbar_layout.addWidget(self._speichern_button)
@@ -1376,7 +1376,12 @@ class ZeiteintragWindow(QMainWindow):
         return snapshot
 
     def _aktualisiere_zuruecksetzen_button(self) -> None:
-        self._laden_button.setEnabled(self._has_unsaved_changes)
+        aktiv = self._has_unsaved_changes
+        self._laden_button.setEnabled(aktiv)
+        if aktiv:
+            self._laden_button.setStyleSheet("QPushButton { color: red; }")
+        else:
+            self._laden_button.setStyleSheet("")
         anzahl = len(self._view_model.zu_loeschende_ids)
         if anzahl == 0:
             self._loesch_hinweis_label.hide()
