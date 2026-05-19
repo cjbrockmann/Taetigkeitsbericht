@@ -119,14 +119,14 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 # datum_spalten — Excel-Datentyp Datum (TSV: Serienzahl, HTML: DD.MM.YYYY)
 # integer_spalten / float_spalten — Excel-Zahl (leer = keine Spalte)
 # text_spalten — Excel-Datentyp Text (z. B. [18] Kalendertag „7.“)
-# html_formatierung — false: nur TSV; bei „blank“ kein HTML (Excel-Formeln/Spalten schuetzen)
+# spreadsheet_xml_formatierung — false: nur TSV; true: zusaetzlich Spreadsheet-XML (ss:Index bei „blank“)
 # Pro Spaltenindex nur in einer Typ-Liste; Aenderungen an cell_spec gelten nach Speichern sofort.
 #
 [zeiteintrag_excel_export]
 include_header = false       # Beim Export nach Excel, Header miteinschliessen 
 leading_empty_columns = 0    # Beim Export nach Excel, leere Spalten am Anfang der Zeile
 trailing_empty_columns = 0   # Beim Export nach Excel, leere Spalten am Ende der Zeile
-html_formatierung = true     # Beim Export nach Excel, HTML-Formatierung verwenden  
+spreadsheet_xml_formatierung = true  # false = nur TSV; true = TSV + Spreadsheet-XML (Excel Desktop)
 datum_spalten = [1]    # Export nach Excel als Datum
 uhrzeit_spalten = [7, 8, 9, 10, 11, 12] # Export nach Excel als Zeit 
 integer_spalten = []   # Export nach Excel als Ganzzahl

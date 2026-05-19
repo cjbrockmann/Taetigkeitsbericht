@@ -27,6 +27,20 @@ DEFAULT_ZEITEINTRAG_EXCEL_CELL_SPEC: tuple[int | None, ...] = (
 )
 
 
+def _parse_bool_wert(wert: Any, *, default: bool) -> bool:
+    if isinstance(wert, bool):
+        return wert
+    if isinstance(wert, int):
+        return wert != 0
+    if isinstance(wert, str):
+        normalisiert = wert.strip().lower()
+        if normalisiert in ("false", "0", "no", "nein"):
+            return False
+        if normalisiert in ("true", "1", "yes", "ja"):
+            return True
+    return default
+
+
 def _stunden_zu_hh_mm(wert: Any) -> str:
     if isinstance(wert, bool):
         raise ValueError("stunden darf kein bool sein.")
@@ -145,7 +159,7 @@ class MandantWochenstunden:
 
 @dataclass(frozen=True)
 class ZeiteintragExcelExportSettings:
-    """Einstellungen fuer „Fuer Excel kopieren“ (TSV + HTML in Zwischenablage)."""
+    """Einstellungen fuer „Fuer Excel kopieren“ (TSV + optional Spreadsheet-XML)."""
 
     include_header: bool = False
     leading_empty_columns: int = 0
@@ -156,7 +170,7 @@ class ZeiteintragExcelExportSettings:
     integer_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_INTEGER_SPALTEN
     float_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_FLOAT_SPALTEN
     text_spalten: tuple[int, ...] = DEFAULT_ZEITEINTRAG_EXCEL_TEXT_SPALTEN
-    html_formatierung: bool = True
+    spreadsheet_xml_formatierung: bool = False
 
     def __post_init__(self) -> None:
         if self.leading_empty_columns < 0 or self.trailing_empty_columns < 0:
@@ -249,6 +263,15 @@ class AppConfig:
     )
 
 
+def _parse_spreadsheet_xml_formatierung(sec: dict[str, Any]) -> bool:
+    """Nur [zeiteintrag_excel_export].spreadsheet_xml_formatierung; fehlt der Key → false."""
+    if "spreadsheet_xml_formatierung" in sec:
+        return _parse_bool_wert(sec["spreadsheet_xml_formatierung"], default=False)
+    if "html_formatierung" in sec:
+        return _parse_bool_wert(sec["html_formatierung"], default=False)
+    return False
+
+
 def _section_zeiteintrag_excel_export(data: dict[str, Any]) -> ZeiteintragExcelExportSettings:
     sec = data.get("zeiteintrag_excel_export")
     if sec is None:
@@ -285,7 +308,7 @@ def _section_zeiteintrag_excel_export(data: dict[str, Any]) -> ZeiteintragExcelE
             DEFAULT_ZEITEINTRAG_EXCEL_TEXT_SPALTEN,
             "text_spalten",
         ),
-        html_formatierung=bool(sec.get("html_formatierung", True)),
+        spreadsheet_xml_formatierung=_parse_spreadsheet_xml_formatierung(sec),
     )
 
 

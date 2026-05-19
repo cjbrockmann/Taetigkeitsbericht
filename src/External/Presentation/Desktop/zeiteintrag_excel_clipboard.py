@@ -1,4 +1,4 @@
-"""Hilfen fuer „Fuer Excel kopieren“ (TSV + optional HTML mit Excel-Zahlformaten)."""
+"""Hilfen fuer „Fuer Excel kopieren“ (TSV + optional Spreadsheet-XML)."""
 
 from __future__ import annotations
 
@@ -216,8 +216,23 @@ def html_tabelle_fuer_excel(
     )
 
 
-def tsv_zeile(zeilen_zellen: list[ExcelExportZelle]) -> str:
-    return "\t".join(z.text for z in zeilen_zellen)
+def _tsv_feld(
+    zelle: ExcelExportZelle, *, leere_als_leerzeichen: bool
+) -> str:
+    """BLANK unveraendert; bei reinem TSV-Export leere Felder als „ “ zum Ueberschreiben in Excel."""
+    if zelle.typ == ExcelZelltyp.BLANK:
+        return zelle.text
+    if leere_als_leerzeichen and not zelle.text.strip():
+        return " "
+    return zelle.text
+
+
+def tsv_zeile(
+    zeilen_zellen: list[ExcelExportZelle], *, leere_als_leerzeichen: bool = False
+) -> str:
+    return "\t".join(
+        _tsv_feld(z, leere_als_leerzeichen=leere_als_leerzeichen) for z in zeilen_zellen
+    )
 
 
 def _export_zelle_hat_inhalt(zelle: ExcelExportZelle) -> bool:
@@ -340,39 +355,55 @@ def _windows_zwischenablage_xml_spreadsheet_hinzufuegen(xml: str) -> bool:
         user32.CloseClipboard()
 
 
+def zwischenablage_format_hinweis(formate: frozenset[str]) -> str:
+    """Lesbarer Formatname fuer die Statuszeile (entspricht zwischenablage_excel_formate)."""
+    if "xml" in formate:
+        return "TSV + Spreadsheet-XML"
+    return "TSV"
+
+
+def zwischenablage_excel_formate(*, spreadsheet_xml_formatierung: bool) -> frozenset[str]:
+    """
+    Welche Formate setze_excel_zwischenablage erzeugt (immer „tsv“).
+
+    spreadsheet_xml_formatierung=false: nur TSV.
+    spreadsheet_xml_formatierung=true: TSV + Spreadsheet-XML (ss:Index bei blank-Zellen).
+    """
+    formate: set[str] = {"tsv"}
+    if spreadsheet_xml_formatierung:
+        formate.add("xml")
+    return frozenset(formate)
+
+
 def setze_excel_zwischenablage(
     zeilen: list[list[ExcelExportZelle]],
     *,
     text_spalten: frozenset[int],
-    html_formatierung: bool,
-    mit_blank_ss_index: bool,
+    spreadsheet_xml_formatierung: bool,
     kopfzeile: bool = False,
-) -> bool:
+) -> tuple[bool, frozenset[str]]:
     """
     Zwischenablage fuer Excel und LibreOffice/OpenOffice Calc.
 
-    Immer text/plain (TSV): Calc/Excel koennen einfuegen; leere Felder loeschen Zielzellen.
-    Bei mit_blank_ss_index zusaetzlich SpreadsheetML (ss:Index): blank-Spalten in MS Excel
-    unveraendert; kein HTML (wuerde alle Spalten ueberschreiben und Formate loeschen).
+    Gibt (erfolg, formate) zurueck; formate fuer die Statuszeile (siehe
+    zwischenablage_format_hinweis).
     """
     from PySide6.QtCore import QByteArray, QMimeData
     from PySide6.QtGui import QGuiApplication
 
-    tsv = "\n".join(tsv_zeile(row) for row in zeilen)
+    formate = zwischenablage_excel_formate(
+        spreadsheet_xml_formatierung=spreadsheet_xml_formatierung,
+    )
+    leere_als_leerzeichen = formate == frozenset({"tsv"})
+
+    tsv = "\n".join(
+        tsv_zeile(row, leere_als_leerzeichen=leere_als_leerzeichen) for row in zeilen
+    )
     mime = QMimeData()
     mime.setText(tsv)
 
-    if html_formatierung and not mit_blank_ss_index:
-        mime.setHtml(
-            html_tabelle_fuer_excel(
-                zeilen,
-                text_spalten=text_spalten,
-                kopfzeile=kopfzeile,
-            )
-        )
-
     xml: str | None = None
-    if mit_blank_ss_index:
+    if "xml" in formate:
         xml = spreadsheetml_aus_excel_zeilen(zeilen, text_spalten=text_spalten)
         raw = QByteArray(xml.encode("utf-8"))
         for name in ("XML Spreadsheet", "application/vnd.ms-excel", "text/xml"):
@@ -380,8 +411,8 @@ def setze_excel_zwischenablage(
 
     cb = QGuiApplication.clipboard()
     if cb is None:
-        return False
+        return False, formate
     cb.setMimeData(mime)
     if xml is not None:
         _windows_zwischenablage_xml_spreadsheet_hinzufuegen(xml)
-    return cb.mimeData() is not None
+    return cb.mimeData() is not None, formate

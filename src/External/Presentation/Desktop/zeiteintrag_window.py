@@ -52,9 +52,9 @@ from External.Presentation.Desktop.betriebsferien_view import BetriebsferienView
 from External.Presentation.Desktop.zeiteintrag_excel_clipboard import (
     ExcelExportZelle,
     ExcelZelltyp,
-    cell_spec_hat_platzhalter,
     excel_zelltyp_fuer_spalte,
     setze_excel_zwischenablage,
+    zwischenablage_format_hinweis,
     zellenwerte_fuer_excel,
 )
 from External.Presentation.Desktop.feiertag_view import FeiertagView
@@ -348,7 +348,7 @@ class GruppenHeaderView(QHeaderView):
 class ZeiteintragWindow(QMainWindow):
     _CONTAINER_GRUPPE_BREITE = 300
     _CONTAINER_GRUPPE_HOEHE = 30
-    _KOPFZEILE_MANDANT_ABSTAND = 16
+    _KOPFZEILE_MANDANT_RAND = 20
 
     _TAB_ZEITEINTRAEGE = 0
     _TAB_STUNDENPLAN = 1
@@ -752,7 +752,7 @@ class ZeiteintragWindow(QMainWindow):
         kopfzeile.setMinimumHeight(self._CONTAINER_GRUPPE_HOEHE + 8)
         kopfzeile_stack = QStackedLayout(kopfzeile)
         kopfzeile_stack.setStackingMode(QStackedLayout.StackingMode.StackAll)
-        kopfzeile_stack.setContentsMargins(10, 4, 10, 0)
+        kopfzeile_stack.setContentsMargins(10, 4, self._KOPFZEILE_MANDANT_RAND, 0)
 
         self._app_name_label = QLabel(self._app_config.name, kopfzeile)
         titel_font = self._app_name_label.font()
@@ -771,17 +771,19 @@ class ZeiteintragWindow(QMainWindow):
         self._app_name_label.setAttribute(
             Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
         )
-        titel_rand = self._CONTAINER_GRUPPE_BREITE + self._KOPFZEILE_MANDANT_ABSTAND
+        titel_rand = self._CONTAINER_GRUPPE_BREITE + self._KOPFZEILE_MANDANT_RAND
         self._app_name_label.setContentsMargins(titel_rand, 0, titel_rand, 0)
 
         mandant_zeile = QWidget(kopfzeile)
         mandant_zeile_layout = QHBoxLayout(mandant_zeile)
         mandant_zeile_layout.setContentsMargins(0, 0, 0, 0)
+        mandant_zeile_layout.setSpacing(0)
         mandant_zeile_layout.addStretch(1)
         mandant_zeile_layout.addWidget(
             self._container_gruppe,
             alignment=Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
         )
+        mandant_zeile_layout.addSpacing(self._KOPFZEILE_MANDANT_RAND)
 
         kopfzeile_stack.addWidget(self._app_name_label)
         kopfzeile_stack.addWidget(mandant_zeile)
@@ -1229,7 +1231,8 @@ class ZeiteintragWindow(QMainWindow):
 
     def _kopiere_tabelle_fuer_excel(self) -> None:
         """Alle Monatszeilen gemaess cell_spec; blank-Spalten ueberspringen, Rest ueberschreiben."""
-        self._laden_excel_export_config()
+        if not self._laden_excel_export_config():
+            return
         model = self._view_model.table_model
         parent = QModelIndex()
         cfg = self._excel_export
@@ -1242,14 +1245,13 @@ class ZeiteintragWindow(QMainWindow):
         clipboard = QGuiApplication.clipboard()
         if clipboard is None:
             return
-        hat_blank = cell_spec_hat_platzhalter(cfg.cell_spec)
-        if not setze_excel_zwischenablage(
+        ok, formate = setze_excel_zwischenablage(
             zeilen,
             text_spalten=frozenset(cfg.text_spalten),
-            html_formatierung=cfg.html_formatierung,
-            mit_blank_ss_index=hat_blank,
+            spreadsheet_xml_formatierung=cfg.spreadsheet_xml_formatierung,
             kopfzeile=cfg.include_header,
-        ):
+        )
+        if not ok:
             warnung(
                 self,
                 "Excel-Export",
@@ -1259,7 +1261,8 @@ class ZeiteintragWindow(QMainWindow):
         spalten = len(zeilen[0]) if zeilen else len(cfg.cell_spec)
         kopf_hinweis = " mit Kopfzeile" if cfg.include_header else ""
         self._set_status_text(
-            f"{n} Datenzeile(n){kopf_hinweis}, {spalten} Spalte(n) kopiert."
+            f"{n} Datenzeile(n){kopf_hinweis}, {spalten} Spalte(n) als "
+            f"{zwischenablage_format_hinweis(formate)} kopiert."
         )
 
     def _kopiere_markierte_zellen_in_zwischenablage(self, silent: bool = False) -> None:

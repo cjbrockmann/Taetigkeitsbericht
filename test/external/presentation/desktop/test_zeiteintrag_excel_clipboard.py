@@ -8,6 +8,8 @@ from External.Presentation.Desktop.zeiteintrag_excel_clipboard import (
     spreadsheetml_aus_excel_zeilen,
     tsv_zeile,
     uhrzeit_als_excel_serial,
+    zwischenablage_excel_formate,
+    zwischenablage_format_hinweis,
     zellenwert_fuer_excel_tsv,
 )
 
@@ -28,9 +30,40 @@ def test_tsv_zeile_join():
     assert tsv_zeile(zellen) == "a\tb"
 
 
+def test_tsv_zeile_leere_zellen_als_leerzeichen():
+    zellen = [
+        ExcelExportZelle(0, "Mo", "Mo", ExcelZelltyp.TEXT),
+        ExcelExportZelle(7, "", "", ExcelZelltyp.UHRZEIT),
+        ExcelExportZelle(None, "", "", ExcelZelltyp.BLANK),
+        ExcelExportZelle(16, "", "", ExcelZelltyp.TEXT),
+    ]
+    assert tsv_zeile(zellen) == "Mo\t\t\t"
+    assert tsv_zeile(zellen, leere_als_leerzeichen=True) == "Mo\t \t\t "
+
+
 def test_cell_spec_hat_platzhalter():
     assert cell_spec_hat_platzhalter((1, None, 3)) is True
     assert cell_spec_hat_platzhalter((1, 2, 3)) is False
+
+
+def test_zwischenablage_excel_formate_nur_tsv():
+    assert zwischenablage_excel_formate(
+        spreadsheet_xml_formatierung=False
+    ) == frozenset({"tsv"})
+
+
+def test_zwischenablage_excel_formate_mit_spreadsheet_xml():
+    assert zwischenablage_excel_formate(
+        spreadsheet_xml_formatierung=True
+    ) == frozenset({"tsv", "xml"})
+
+
+def test_zwischenablage_format_hinweis():
+    assert zwischenablage_format_hinweis(frozenset({"tsv"})) == "TSV"
+    assert (
+        zwischenablage_format_hinweis(frozenset({"tsv", "xml"}))
+        == "TSV + Spreadsheet-XML"
+    )
 
 
 def test_spreadsheetml_blank_spalte_ss_index():
