@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import contextmanager
 from datetime import date, datetime, time
 from typing import Optional
 from uuid import UUID
 
+from pydantic import ValidationError
 from PySide6.QtCore import QObject, Qt, Signal
 
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
@@ -129,6 +131,15 @@ class ZeiteintragViewModel(QObject):
     def set_mandant_id(self, mandant_id: int) -> None:
         self._mandant_id = mandant_id
 
+    @contextmanager
+    def anreicherung_ausgesetzt(self):
+        vorher = self._suspend_anreicherung
+        self._suspend_anreicherung = True
+        try:
+            yield
+        finally:
+            self._suspend_anreicherung = vorher
+
     def apply_mandant_wochenstunden(self, wochenstunden: MandantWochenstunden) -> None:
         if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
             self._anwendung.set_vertrag_stunden_nach_wochentag(
@@ -193,7 +204,11 @@ class ZeiteintragViewModel(QObject):
         return list(self._zu_loeschende_ids)
 
     def add_row(self, position: int | None = None, datum: str = "") -> int:
-        pos = self._table_model.add_empty_row(position=position, datum=datum)
+        pos = self._table_model.add_empty_row(
+            position=position,
+            datum=datum,
+            mandant_id=self._aktuelle_mandant_id(),
+        )
         if datum.strip():
             try:
                 self._anreichere_tage({self._parse_date(datum)})
@@ -317,7 +332,9 @@ class ZeiteintragViewModel(QObject):
                 continue
             if tag not in daten:
                 continue
-            dto = self._row_to_dto(row)
+            dto = self._row_to_dto_fuer_anreicherung(row)
+            if dto is None:
+                continue
             nach_tag.setdefault(tag, []).append((row, dto))
         if not nach_tag:
             return
@@ -535,6 +552,16 @@ class ZeiteintragViewModel(QObject):
 
     @staticmethod
     def _row_to_dto(row: ZeiteintragRow) -> ZeiteintragsDTO:
+        dto = ZeiteintragViewModel._row_to_dto_fuer_anreicherung(row)
+        if dto is None:
+            raise ValueError(
+                "Zeile ist unvollstaendig oder Von/Bis sind ungueltig (z. B. Von nach Bis)."
+            )
+        return dto
+
+    @staticmethod
+    def _row_to_dto_fuer_anreicherung(row: ZeiteintragRow) -> ZeiteintragsDTO | None:
+        """Wie _row_to_dto, ohne Absturz bei Teileingabe (Anreicherung in der Tabelle)."""
         pause1_von, pause1_bis = ZeiteintragViewModel._parse_pausenfelder_aus_zeile(
             row.pause_beginn, row.pause_ende
         )
@@ -544,17 +571,20 @@ class ZeiteintragViewModel(QObject):
         arbeitszeit_von, arbeitszeit_bis = ZeiteintragViewModel._parse_arbeitszeitfelder_aus_zeile(
             row.uhrzeit_von, row.uhrzeit_bis
         )
-        return ZeiteintragsDTO(
-            id=row.id,
-            datum=ZeiteintragViewModel._parse_date(row.datum),
-            uhrzeit_von=arbeitszeit_von,
-            uhrzeit_bis=arbeitszeit_bis,
-            pause_beginn=pause1_von,
-            pause_ende=pause1_bis,
-            pause2_beginn=pause2_von,
-            pause2_ende=pause2_bis,
-            anmerkung=row.anmerkung or None,
-        )
+        try:
+            return ZeiteintragsDTO(
+                id=row.id,
+                datum=ZeiteintragViewModel._parse_date(row.datum),
+                uhrzeit_von=arbeitszeit_von,
+                uhrzeit_bis=arbeitszeit_bis,
+                pause_beginn=pause1_von,
+                pause_ende=pause1_bis,
+                pause2_beginn=pause2_von,
+                pause2_ende=pause2_bis,
+                anmerkung=row.anmerkung or None,
+            )
+        except (ValidationError, ValueError):
+            return None
 
     @staticmethod
     def _apply_dto_to_row(row: ZeiteintragRow, eintrag: ZeiteintragsDTO) -> None:
@@ -603,6 +633,7 @@ class ZeiteintragViewModel(QObject):
         )
         return ZeiteintragRow(
             id=eintrag.id,
+            mandant_id=eintrag.mandant_id,
             datum=eintrag.datum.strftime("%d.%m.%Y"),
             uhrzeit_von=von_text,
             uhrzeit_bis=bis_text,

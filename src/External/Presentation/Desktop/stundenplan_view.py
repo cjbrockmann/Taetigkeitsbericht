@@ -27,9 +27,10 @@ from External.Presentation.Desktop.stundenplan_table_model import (
 )
 from External.Presentation.Desktop.hilfe import ViewMarkdownHilfe
 from External.Presentation.Desktop.message_boxes import warnung
+from App.app_config import Mandant
+from External.Presentation.Desktop.mandant_vertical_header import install_mandant_vertical_header
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
 from External.Presentation.Desktop.table_view_styles import (
-    apply_rowcounter_color_to_table,
     DirtyRowItemDelegate,
     STANDARD_TABLE_VIEW_STYLESHEET,
 )
@@ -184,14 +185,14 @@ class StundenplanView(QWidget):
     def has_unsaved_changes(self) -> bool:
         return self._has_unsaved_changes
 
-    def set_rowcounter_color(self, color: str) -> None:
-        apply_rowcounter_color_to_table(self._table, color)
+    def install_mandant_zeilenzaehler(self, mandanten: tuple[Mandant, ...]) -> None:
+        install_mandant_vertical_header(self._table, mandanten)
 
     def set_mandant_id(self, mandant_id: int) -> None:
         self._view_model.set_mandant_id(mandant_id)
 
     def bei_mandant_gewechselt(self) -> None:
-        self._lade_alle()
+        self._lade_alle(registry_benachrichtigen=False)
 
     def verwerfe_ungespeicherte_aenderungen(self) -> None:
         self._lade_alle()
@@ -284,10 +285,10 @@ class StundenplanView(QWidget):
         txt = minuten_als_hh_mm(summe_min)
         self._summen_label.setText(f"Soll: {txt}")
 
-    def _lade_alle(self) -> None:
+    def _lade_alle(self, *, registry_benachrichtigen: bool = True) -> None:
         self._suspend_dirty_tracking = True
         try:
-            self._view_model.lade_alle()
+            self._view_model.lade_alle(registry_benachrichtigen=registry_benachrichtigen)
         finally:
             self._suspend_dirty_tracking = False
         self._capture_baseline()

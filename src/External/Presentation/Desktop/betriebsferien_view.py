@@ -29,10 +29,11 @@ from External.Presentation.Desktop.form_bearbeitung_dirty import (
     dirty_indices_bei_form_bearbeitung,
     hat_ungespeicherte_formular_aenderungen,
 )
+from App.app_config import Mandant
+from External.Presentation.Desktop.mandant_vertical_header import install_mandant_vertical_header
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
     STANDARD_TABLE_VIEW_STYLESHEET,
-    apply_rowcounter_color_to_table,
 )
 
 
@@ -50,8 +51,8 @@ class BetriebsferienView(QWidget):
         self._bind_view_model()
         self._reset_formular_defaults()
 
-    def set_rowcounter_color(self, color: str) -> None:
-        apply_rowcounter_color_to_table(self._table, color)
+    def install_mandant_zeilenzaehler(self, mandanten: tuple[Mandant, ...]) -> None:
+        install_mandant_vertical_header(self._table, mandanten)
 
     def set_mandant_id(self, mandant_id: int) -> None:
         self._view_model.set_mandant_id(mandant_id)

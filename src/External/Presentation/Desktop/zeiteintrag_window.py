@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QStackedLayout,
     QStyle,
     QStyledItemDelegate,
     QStyleOptionHeader,
@@ -60,10 +61,12 @@ from External.Presentation.Desktop.feiertag_view import FeiertagView
 from External.Presentation.Desktop.krankmeldung_view import KrankmeldungView
 from External.Presentation.Desktop.schulferien_view import SchulferienView
 from External.Presentation.Desktop.stundenplan_view import StundenplanView
+from External.Presentation.Desktop.mandant_vertical_header import (
+    install_mandant_vertical_header,
+)
 from External.Presentation.Desktop.table_view_styles import (
     DirtyRowItemDelegate,
     ZEITEINTRAG_TABLE_VIEW_STYLESHEET,
-    apply_rowcounter_color_to_table,
     paint_option_mit_zeilenfarbe,
     style_tab_widget,
 )
@@ -345,6 +348,7 @@ class GruppenHeaderView(QHeaderView):
 class ZeiteintragWindow(QMainWindow):
     _CONTAINER_GRUPPE_BREITE = 300
     _CONTAINER_GRUPPE_HOEHE = 30
+    _KOPFZEILE_MANDANT_ABSTAND = 16
 
     _TAB_ZEITEINTRAEGE = 0
     _TAB_STUNDENPLAN = 1
@@ -388,9 +392,12 @@ class ZeiteintragWindow(QMainWindow):
         self._baseline_rows: list[tuple[object, str, str, str, str, str, str, str, str]] = []
         self._bestaetigter_tab_index = self._TAB_ZEITEINTRAEGE
         self._tab_wechsel_blockiert = False
+        self._mandant_wechsel_laeuft = False
+        self._mandant_id_vor_popup = mandant_auswahl.mandant_id
         self.setWindowTitle("Tätigkeitsbericht – Erfassung")
         self.resize(1200, 640)
         self._build_ui()
+        self._install_mandant_zeilenzaehler()
         self._bind_view_model()
         self._synchronisiere_mandant_views(erstes_laden=True)
 
@@ -443,7 +450,8 @@ class ZeiteintragWindow(QMainWindow):
         if start >= 0:
             self._mandant_combo.setCurrentIndex(start)
         self._wende_mandant_combo_farben(self._mandant_auswahl.aktueller_mandant())
-        self._mandant_combo.currentIndexChanged.connect(self._on_mandant_combo_changed)
+        self._mandant_combo.installEventFilter(self)
+        self._mandant_combo.activated.connect(self._on_mandant_combo_activated)
         self._mandant_auswahl.mandant_id_geaendert.connect(self._sync_mandant_combo)
         self._mandant_auswahl.mandant_id_geaendert.connect(self._on_mandant_id_geaendert)
 
@@ -505,36 +513,70 @@ class ZeiteintragWindow(QMainWindow):
         self._mandant_pfeil_label.setStyleSheet(
             f"QLabel {{ color: {fg}; background-color: transparent; border: none; }}"
         )
-        self._wende_mandant_rowcounter_farben(mandant)
 
-    def _wende_mandant_rowcounter_farben(self, mandant: Mandant) -> None:
-        farbe = mandant.rowcounter_color
-        apply_rowcounter_color_to_table(self._table, farbe)
-        self._stundenplan_view.set_rowcounter_color(farbe)
-        self._betriebsferien_view.set_rowcounter_color(farbe)
+    def _install_mandant_zeilenzaehler(self) -> None:
+        mandanten = self._app_config.mandanten
+        install_mandant_vertical_header(self._table, mandanten)
+        self._stundenplan_view.install_mandant_zeilenzaehler(mandanten)
+        self._betriebsferien_view.install_mandant_zeilenzaehler(mandanten)
 
-    def _on_mandant_combo_changed(self, index: int) -> None:
+    def _set_mandant_combo_auf_id(self, mandant_id: int) -> None:
+        index = self._mandant_combo.findData(mandant_id)
+        if index < 0:
+            return
+        if self._mandant_combo.currentIndex() == index:
+            return
+        self._mandant_combo.blockSignals(True)
+        try:
+            self._mandant_combo.setCurrentIndex(index)
+        finally:
+            self._mandant_combo.blockSignals(False)
+
+    def _merke_mandant_id_vor_combo_popup(self) -> None:
+        self._mandant_id_vor_popup = self._mandant_auswahl.mandant_id
+
+    def _on_mandant_combo_activated(self, index: int) -> None:
+        if self._mandant_wechsel_laeuft:
+            return
         if index < 0:
             return
         mandant_id = self._mandant_combo.itemData(index)
         if mandant_id is None:
             return
-        self._mandant_auswahl.set_mandant_id(int(mandant_id))
-        self._wende_mandant_combo_farben(self._mandant_auswahl.aktueller_mandant())
+        neuer_mandant_id = int(mandant_id)
+        if neuer_mandant_id == self._mandant_id_vor_popup:
+            return
+        if self._has_unsaved_changes and not self._confirm_discard_mandant_wechsel():
+            QTimer.singleShot(
+                0,
+                lambda: self._mandant_combo_wechsel_zuruecksetzen(self._mandant_id_vor_popup),
+            )
+            return
+        self._fuehre_mandantenwechsel_durch(neuer_mandant_id)
+
+    def _mandant_combo_wechsel_zuruecksetzen(self, mandant_id: int) -> None:
+        self._mandant_wechsel_laeuft = True
+        try:
+            self._set_mandant_combo_auf_id(mandant_id)
+            self._wende_mandant_combo_farben(self._mandant_auswahl.aktueller_mandant())
+            self._mandant_combo.setFocus(Qt.FocusReason.OtherFocusReason)
+        finally:
+            self._mandant_wechsel_laeuft = False
+
+    def _fuehre_mandantenwechsel_durch(self, mandant_id: int) -> None:
+        self._mandant_wechsel_laeuft = True
+        try:
+            with self._view_model.anreicherung_ausgesetzt():
+                self._mandant_auswahl.set_mandant_id(mandant_id)
+        finally:
+            self._mandant_wechsel_laeuft = False
 
     def _sync_mandant_combo(self, mandant_id: int) -> None:
-        index = self._mandant_combo.findData(mandant_id)
-        if index < 0:
-            return
-        if self._mandant_combo.currentIndex() != index:
-            self._mandant_combo.blockSignals(True)
-            self._mandant_combo.setCurrentIndex(index)
-            self._mandant_combo.blockSignals(False)
+        self._set_mandant_combo_auf_id(mandant_id)
         mandant = self._mandant_auswahl.aktueller_mandant()
         self._wende_mandant_combo_farben(mandant)
 
     def _on_mandant_id_geaendert(self, _mandant_id: int) -> None:
-        self._wende_mandant_rowcounter_farben(self._mandant_auswahl.aktueller_mandant())
         self._synchronisiere_mandant_views(erstes_laden=False)
 
     def _synchronisiere_mandant_views(self, *, erstes_laden: bool) -> None:
@@ -545,12 +587,18 @@ class ZeiteintragWindow(QMainWindow):
             self._view_model.apply_mandant_wochenstunden(wochenstunden)
         self._stundenplan_view.set_mandant_id(mandant_id)
         self._betriebsferien_view.set_mandant_id(mandant_id)
-        self._stundenplan_view.bei_mandant_gewechselt()
-        self._betriebsferien_view.bei_mandant_gewechselt()
-        if erstes_laden or (
-            self._current_loaded_year is not None and self._current_loaded_month is not None
-        ):
+        if erstes_laden:
+            self._stundenplan_view.bei_mandant_gewechselt()
+            self._betriebsferien_view.bei_mandant_gewechselt()
             self._load_selected_period()
+        else:
+            self._stundenplan_view.bei_mandant_gewechselt()
+            self._betriebsferien_view.bei_mandant_gewechselt()
+            if (
+                self._current_loaded_year is not None
+                and self._current_loaded_month is not None
+            ):
+                self._reload_current_period()
 
     def _build_ui(self) -> None:
         zeiteintrag_widget = QWidget(self)
@@ -696,11 +744,45 @@ class ZeiteintragWindow(QMainWindow):
         central_layout = QVBoxLayout(central)
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(4)
-        container_zeile = QHBoxLayout()
-        container_zeile.setContentsMargins(10, 4, 0, 0)
-        container_zeile.addWidget(self._container_gruppe)
-        container_zeile.addStretch(1)
-        central_layout.addLayout(container_zeile)
+
+        kopfzeile = QWidget(central)
+        kopfzeile.setMinimumHeight(self._CONTAINER_GRUPPE_HOEHE + 8)
+        kopfzeile_stack = QStackedLayout(kopfzeile)
+        kopfzeile_stack.setStackingMode(QStackedLayout.StackingMode.StackAll)
+        kopfzeile_stack.setContentsMargins(10, 4, 10, 0)
+
+        self._app_name_label = QLabel(self._app_config.name, kopfzeile)
+        titel_font = self._app_name_label.font()
+        titel_font.setBold(True)
+        titel_font.setPointSize(titel_font.pointSize() + 2)
+        self._app_name_label.setFont(titel_font)
+        self._app_name_label.setAlignment(
+            Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter
+        )
+        self._app_name_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        self._app_name_label.setStyleSheet(
+            "QLabel { background-color: transparent; border: none; }"
+        )
+        self._app_name_label.setAttribute(
+            Qt.WidgetAttribute.WA_TransparentForMouseEvents, True
+        )
+        titel_rand = self._CONTAINER_GRUPPE_BREITE + self._KOPFZEILE_MANDANT_ABSTAND
+        self._app_name_label.setContentsMargins(titel_rand, 0, titel_rand, 0)
+
+        mandant_zeile = QWidget(kopfzeile)
+        mandant_zeile_layout = QHBoxLayout(mandant_zeile)
+        mandant_zeile_layout.setContentsMargins(0, 0, 0, 0)
+        mandant_zeile_layout.addStretch(1)
+        mandant_zeile_layout.addWidget(
+            self._container_gruppe,
+            alignment=Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+        )
+
+        kopfzeile_stack.addWidget(self._app_name_label)
+        kopfzeile_stack.addWidget(mandant_zeile)
+        central_layout.addWidget(kopfzeile)
         central_layout.addWidget(self._tab_widget, 1)
         self.setCentralWidget(central)
 
@@ -819,6 +901,14 @@ class ZeiteintragWindow(QMainWindow):
             "Trotzdem wechseln?",
         )
 
+    def _confirm_discard_mandant_wechsel(self) -> bool:
+        return frage_ja_nein(
+            self,
+            "Ungespeicherte Änderungen",
+            "Es gibt ungespeicherte Zeilen. Beim Mandantenwechsel gehen diese verloren. "
+            "Trotzdem wechseln?",
+        )
+
     def _confirm_discard_tab_changes(self, tab_index: int) -> bool:
         if not self._tab_has_unsaved(tab_index):
             return True
@@ -898,10 +988,18 @@ class ZeiteintragWindow(QMainWindow):
         return True
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if watched is getattr(self, "_mandant_combo", None):
+            if event.type() == QEvent.Type.MouseButtonPress:
+                mouse = event
+                if isinstance(mouse, QMouseEvent) and mouse.button() == Qt.MouseButton.LeftButton:
+                    self._merke_mandant_id_vor_combo_popup()
+            return super().eventFilter(watched, event)
+
         if watched is getattr(self, "_mandant_pfeil_label", None):
             if event.type() == QEvent.Type.MouseButtonPress:
                 mouse = event
                 if isinstance(mouse, QMouseEvent) and mouse.button() == Qt.MouseButton.LeftButton:
+                    self._merke_mandant_id_vor_combo_popup()
                     self._mandant_combo.showPopup()
                     return True
             return super().eventFilter(watched, event)

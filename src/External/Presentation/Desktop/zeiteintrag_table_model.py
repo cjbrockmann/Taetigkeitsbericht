@@ -145,6 +145,7 @@ def feiertag_stern_icon() -> QIcon:
 @dataclass
 class ZeiteintragRow:
     id: UUID | None = None
+    mandant_id: int | None = None
     datum: str = ""
     uhrzeit_von: str = ""
     uhrzeit_bis: str = ""
@@ -226,6 +227,11 @@ class ZeiteintragTableModel(QAbstractTableModel):
     @property
     def rows(self) -> list[ZeiteintragRow]:
         return self._rows
+
+    def mandant_id_for_row(self, row_index: int) -> int | None:
+        if row_index < 0 or row_index >= len(self._rows):
+            return None
+        return self._rows[row_index].mandant_id
 
     def set_rows(self, rows: list[ZeiteintragRow]) -> None:
         self.beginResetModel()
@@ -462,11 +468,17 @@ class ZeiteintragTableModel(QAbstractTableModel):
             return Qt.ItemIsSelectable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
 
-    def add_empty_row(self, position: int | None = None, datum: str = "") -> int:
+    def add_empty_row(
+        self,
+        position: int | None = None,
+        datum: str = "",
+        *,
+        mandant_id: int | None = None,
+    ) -> int:
         if position is None or position < 0 or position > len(self._rows):
             position = len(self._rows)
         self.beginInsertRows(QModelIndex(), position, position)
-        self._rows.insert(position, ZeiteintragRow(datum=datum))
+        self._rows.insert(position, ZeiteintragRow(datum=datum, mandant_id=mandant_id))
         self.endInsertRows()
         return position
 

@@ -39,6 +39,7 @@ class BetriebsferienViewModel(QObject):
         rows = [
             BetriebsferienRow(
                 id=eintrag.id,
+                mandant_id=eintrag.mandant_id,
                 datum_von=eintrag.datum_von.strftime("%d.%m.%Y"),
                 datum_bis=eintrag.datum_bis.strftime("%d.%m.%Y"),
                 name=eintrag.betriebsferienname,

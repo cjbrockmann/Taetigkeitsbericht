@@ -15,6 +15,7 @@ class BetriebsferienRow:
     datum_bis: str
     name: str
     anmerkung: str
+    mandant_id: int | None = None
 
 
 class BetriebsferienTableModel(DirtyRowTableModelMixin, QAbstractTableModel):
@@ -33,6 +34,11 @@ class BetriebsferienTableModel(DirtyRowTableModelMixin, QAbstractTableModel):
     @property
     def rows(self) -> list[BetriebsferienRow]:
         return self._rows
+
+    def mandant_id_for_row(self, row_index: int) -> int | None:
+        if row_index < 0 or row_index >= len(self._rows):
+            return None
+        return self._rows[row_index].mandant_id
 
     def set_rows(self, rows: list[BetriebsferienRow]) -> None:
         self.beginResetModel()

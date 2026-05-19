@@ -47,13 +47,15 @@ class StundenplanViewModel(QObject):
     def zu_loeschende_ids(self) -> list[int]:
         return list(self._zu_loeschende_ids)
 
-    def lade_alle(self) -> None:
+    def lade_alle(self, *, registry_benachrichtigen: bool = True) -> None:
         eintraege = self._anwendung.liste(self._aktuelle_mandant_id())
         self._eintraege_cache = list(eintraege)
         rows = [self._map_to_row(eintrag) for eintrag in eintraege]
         self._table_model.set_rows(rows)
         self._zu_loeschende_ids.clear()
-        self._stundenplan_registry.aktualisiere_aus_zeilen(rows, benachrichtigen=True)
+        self._stundenplan_registry.aktualisiere_aus_zeilen(
+            rows, benachrichtigen=registry_benachrichtigen
+        )
         self.status_changed.emit(
             f"{len(rows)} Stundenplan-Eintrag/-einträge geladen."
         )
@@ -100,7 +102,11 @@ class StundenplanViewModel(QObject):
         return list(self._eintraege_cache)
 
     def add_row(self, position: int | None = None, wochentag: int = 1) -> int:
-        return self._table_model.add_empty_row(position=position, wochentag=wochentag)
+        return self._table_model.add_empty_row(
+            position=position,
+            wochentag=wochentag,
+            mandant_id=self._aktuelle_mandant_id(),
+        )
 
     def remove_rows(self, row_indices: list[int]) -> None:
         gueltige_indizes = sorted(
@@ -209,6 +215,7 @@ class StundenplanViewModel(QObject):
     def _map_to_row(eintrag: Stundenplan) -> StundenplanRow:
         return StundenplanRow(
             id=eintrag.id,
+            mandant_id=eintrag.mandant_id,
             wochentag=eintrag.wochentag,
             uhrzeit_von=eintrag.uhrzeit_von.strftime("%H:%M"),
             uhrzeit_bis=eintrag.uhrzeit_bis.strftime("%H:%M"),

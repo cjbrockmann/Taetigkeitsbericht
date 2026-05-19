@@ -30,6 +30,7 @@ WOCHENTAG_LABELS: list[tuple[int, str]] = [
 @dataclass
 class StundenplanRow:
     id: int | None = None
+    mandant_id: int | None = None
     wochentag: int = 1
     uhrzeit_von: str = ""
     uhrzeit_bis: str = ""
@@ -72,6 +73,11 @@ class StundenplanTableModel(QAbstractTableModel):
     @property
     def rows(self) -> list[StundenplanRow]:
         return self._rows
+
+    def mandant_id_for_row(self, row_index: int) -> int | None:
+        if row_index < 0 or row_index >= len(self._rows):
+            return None
+        return self._rows[row_index].mandant_id
 
     def set_rows(self, rows: list[StundenplanRow]) -> None:
         self.beginResetModel()
@@ -210,13 +216,21 @@ class StundenplanTableModel(QAbstractTableModel):
             return Qt.ItemIsSelectable | Qt.ItemIsEnabled
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled | Qt.ItemIsEditable
 
-    def add_empty_row(self, position: int | None = None, wochentag: int = 1) -> int:
+    def add_empty_row(
+        self,
+        position: int | None = None,
+        wochentag: int = 1,
+        *,
+        mandant_id: int | None = None,
+    ) -> int:
         if position is None or position < 0 or position > len(self._rows):
             position = len(self._rows)
         if not 1 <= wochentag <= 7:
             wochentag = 1
         self.beginInsertRows(QModelIndex(), position, position)
-        self._rows.insert(position, StundenplanRow(wochentag=wochentag))
+        self._rows.insert(
+            position, StundenplanRow(wochentag=wochentag, mandant_id=mandant_id)
+        )
         self.endInsertRows()
         return position
 

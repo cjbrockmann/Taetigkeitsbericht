@@ -6,7 +6,10 @@ from App.app_config import Mandant
 
 
 class MandantAuswahl(QObject):
-    """Globale Mandantenauswahl; Zugriff z. B. via MandantAuswahl.instance()."""
+    """
+    Globale Mandantenauswahl der laufenden Sitzung.
+    Die aktuelle ID liegt in ``mandant_id``; Zugriff z. B. via ``MandantAuswahl.instance()``.
+  """
 
     mandant_id_geaendert = Signal(int)
 
@@ -34,6 +37,7 @@ class MandantAuswahl(QObject):
 
     @property
     def mandant_id(self) -> int:
+        """Globale Mandanten-ID (nach bestaetigtem Wechsel in der Combobox)."""
         return self._mandant_id
 
     def aktueller_mandant(self) -> Mandant:
