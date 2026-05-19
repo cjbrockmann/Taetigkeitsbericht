@@ -43,7 +43,8 @@ Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zu
 - **Doppelklick auf die Zelle „Datum“** (nicht auf andere Spalten) einer Zeile übernimmt für diesen Tag und diese **Zeilenposition** die passende Vorlage aus dem Reiter **Stundenplan** (gleicher Wochentag, n-te Zeile am Tag entspricht dem n-ten Block im Stundenplan).
 - An **Feiertagen** ist diese Übernahme nicht vorgesehen.
 - Wenn im Stundenplan für diesen Wochentag **kein** passender Eintrag existiert oder die Zeile nicht zur „n-ten“ Zeile des Tages passt, passiert nichts.
-- Ist das **Kommentar**-Feld der Zeile noch leer, kann die **Anmerkung aus dem Stundenplan** übernommen werden.
+- Ist das **Kommentar**-Feld der Zeile noch leer, kann die **Anmerkung aus dem Stundenplan** übernommen werden – **nicht** bei `kommentar_urlaub_krank_modus = "kuerzel"` in `config.toml` (dann nur Zeiten/Pausen).
+- Spalte **Info**: zeigt beim Laden den Stundenplan-Kommentar zur passenden Zeilenposition (Wochentag, n-te Zeile am Tag) – nur an Werktagen ohne Feiertag; wird **nicht** gespeichert (für späteren Excel-Export vorgesehen).
 
 ---
 

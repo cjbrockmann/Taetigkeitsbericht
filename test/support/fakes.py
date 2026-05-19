@@ -271,4 +271,5 @@ def dto_anwendung(
     app.set_kommentar_krankheitstage("K")
     app.set_kommentar_urlaub_krank_modus("kuerzel")
     app.set_kommentar_ueberstunden_frei("Überstunden frei")
+    app.set_stundenplan_eintraege(stundenplan)
     return app

@@ -82,7 +82,7 @@ def _parse_cell_spec(raw: Any) -> tuple[int | None, ...]:
     return tuple(out)
 
 
-ZEITEINTRAG_SPALTEN_MAX: Final[int] = 19
+ZEITEINTRAG_SPALTEN_MAX: Final[int] = 20
 
 KOMMENTAR_URLAUB_KRANK_MODI: Final[frozenset[str]] = frozenset({"praefix", "kuerzel"})
 DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS: Final[str] = "praefix"

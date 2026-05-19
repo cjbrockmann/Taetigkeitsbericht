@@ -153,6 +153,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         for eintrag in eintraege:
             self._initialisiere_dto(eintrag)
             self._wende_kommentar_regeln_an(eintrag)
+        self._setze_info_aus_stundenplan(eintraege)
         self._setze_soll_felder_fuer_tag(eintraege)
         self._aktualisiere_geleistete_stunden_fuer_tag(eintraege)
 
@@ -232,6 +233,30 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             (e for e in self.stundenplan_eintraege if e.wochentag == wochentag),
             key=lambda e: self._sekunden_seit_mitternacht(e.uhrzeit_von),
         )
+
+    @staticmethod
+    def _stundenplan_bloecke_mit_arbeitszeit(bloecke: list[Stundenplan]) -> list[Stundenplan]:
+        """Wie StundenplanView.zeilen_fuer_wochentag: nur Bloecke mit Von oder Bis."""
+        return [b for b in bloecke if b.uhrzeit_von or b.uhrzeit_bis]
+
+    def _setze_info_aus_stundenplan(self, eintraege: list[ZeiteintragsDTO]) -> None:
+        """Info-Spalte: Stundenplan-Anmerkung je Zeilenposition (nicht Wochenende/Feiertag)."""
+        if not eintraege:
+            return
+        datum = eintraege[0].datum
+        if datum.isoweekday() >= 6 or eintraege[0].ist_feiertag:
+            for eintrag in eintraege:
+                eintrag.info = None
+            return
+        bloecke = self._stundenplan_bloecke_mit_arbeitszeit(
+            self._stundenplan_bloecke_fuer_datum(datum)
+        )
+        for index, eintrag in enumerate(eintraege):
+            if index < len(bloecke):
+                text = (bloecke[index].anmerkung or "").strip()
+                eintrag.info = text or None
+            else:
+                eintrag.info = None
 
     def _verteile_soll_stunden_nach_stundenplan(
         self, eintraege: list[ZeiteintragsDTO]

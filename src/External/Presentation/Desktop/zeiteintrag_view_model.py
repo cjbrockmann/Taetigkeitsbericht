@@ -603,6 +603,7 @@ class ZeiteintragViewModel(QObject):
             eintrag.pause2_ende,
         )
         row.anmerkung = eintrag.anmerkung or ""
+        row.info = eintrag.info or ""
         row.geleistete_stunden = (
             eintrag.geleistete_stunden.strftime("%H:%M")
             if eintrag.geleistete_stunden
@@ -646,6 +647,7 @@ class ZeiteintragViewModel(QObject):
             else "",
             pause2_ende=eintrag.pause2_ende.strftime("%H:%M") if eintrag.pause2_ende else "",
             anmerkung=eintrag.anmerkung or "",
+            info=eintrag.info or "",
             geleistete_stunden=eintrag.geleistete_stunden.strftime("%H:%M") if eintrag.geleistete_stunden else "",
             soll_stunden_nach_stundenplan=eintrag.soll_stunden_nach_Stundenplan.strftime("%H:%M") if eintrag.soll_stunden_nach_Stundenplan else "",
             soll_stunden_nach_vertrag=eintrag.soll_stunden_nach_vertrag.strftime("%H:%M") if eintrag.soll_stunden_nach_vertrag else "",

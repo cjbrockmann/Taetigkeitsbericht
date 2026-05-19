@@ -31,7 +31,7 @@ wochenstunden_max = 48
 #   praefix — Kuerzel mit Doppelpunkt und optionalem Zusatz (z. B. „U: “ oder „K: mein Text“)
 #   kuerzel — nur das Kuerzel aus kommentar_urlaubstage / kommentar_krankheitstage (z. B. „U“ oder „K“)
 kommentar_urlaub_krank_modus = "kuerzel"
-
+# kommentar_urlaub_krank_modus = "praefix"
 
 [[wochenstunden.mandant]]
 mandant_id = 1
@@ -61,10 +61,10 @@ wochenstunden_summe = 4
 
 
 
-# Zeiteintrag-Tabelle (GUI): Spaltenindex 0–19 (ZeiteintragTableModel.HEADERS).
+# Zeiteintrag-Tabelle (GUI): Spaltenindex 0–20 (ZeiteintragTableModel.HEADERS).
 # [zeiteintrag_tabelle]: ausgeblendete_spalten, grauer_hintergrund_spalten (siehe Abschnitt unten).
 # Nur ausgeblendete_spalten verbergen Spalten in der GUI; Daten bleiben im Modell.
-# [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (0–19).
+# [zeiteintrag_excel_export].cell_spec verweist auf dieselben Indizes (0–20).
 #
 #   0  Tag              — Wochentag (Mo–So), aus Datum, nur Anzeige
 #   1  Datum            — DD.MM.YYYY, bearbeitbar
@@ -83,9 +83,10 @@ wochenstunden_summe = 4
 #  14  Soll             — Soll nach Stundenplan, nur Anzeige
 #  15  Vertrag          — Soll nach Vertrag (Zeile 1 je Tag), nur Anzeige
 #  16  Kommentar        — Freitext max. 80 Zeichen, bearbeitbar
-#  17  Tag              — Kalendertag als Text fuer Excel (z. B. „7.“), nur Anzeige
-#  18  Feiertagsname    — Name des Feiertags, nur Anzeige
-#  19  Schulferienname  — Name der Schulferien, nur Anzeige
+#  17  Info             — Stundenplan-Kommentar (nur Anzeige, nicht gespeichert)
+#  18  Tag              — Kalendertag als Text fuer Excel (z. B. „7.“), nur Anzeige
+#  19  Feiertagsname    — Name des Feiertags, nur Anzeige
+#  20  Schulferienname  — Name der Schulferien, nur Anzeige
 #
 
 
@@ -95,8 +96,8 @@ ausgeblendete_spalten = []
 
 
 [zeiteintrag_tabelle]
-# Spalte 17 = Kalendertag fuer Excel (nur Export, bleibt fuer cell_spec erhalten)
-ausgeblendete_spalten = [18, 19]
+# Spalten 18–20 = Kalendertag/Feiertagsname/Schulferienname (Export, bleiben fuer cell_spec)
+ausgeblendete_spalten = [18, 19, 20]
 # Status-Kennzeichen (F, U, K, Sf, Bf) mit gleichem Grau wie Wochenendzeilen (#eeeeee).
 # Leere Liste [] = keine graue Hervorhebung; weglassen = Standard [2, 3, 4, 5, 6].
 grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
@@ -106,8 +107,8 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).
 #
-# cell_spec — Spaltenreihenfolge beim Einfuegen in Excel (Quellindices 0…19):
-#   - Zahl = Wert aus dieser Tabellenspalte (z. B. 0 Wochentag, 17 Kalendertag, 7 Von, 8 Bis, 16 Kommentar)
+# cell_spec — Spaltenreihenfolge beim Einfuegen in Excel (Quellindices 0…20):
+#   - Zahl = Wert aus dieser Tabellenspalte (z. B. 0 Wochentag, 18 Kalendertag, 7 Von, 8 Bis, 16 Kommentar)
 #   - "blank" = diese Spalte beim Einfuegen nicht ueberschreiben (Formeln in Excel/Calc)
 #     Bei „blank“: zusaetzlich SpreadsheetML (ss:Index) fuer MS Excel; immer TSV fuer Calc.
 #     LibreOffice/OpenOffice Calc liest kein XML Spreadsheet — dort tab-getrennt einfügen.
@@ -117,7 +118,7 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 # uhrzeit_spalten — Excel-Datentyp Uhrzeit (TSV: Tagesbruchteil, HTML: HH:MM:SS)
 # datum_spalten — Excel-Datentyp Datum (TSV: Serienzahl, HTML: DD.MM.YYYY)
 # integer_spalten / float_spalten — Excel-Zahl (leer = keine Spalte)
-# text_spalten — Excel-Datentyp Text (z. B. [17] Kalendertag „7.“)
+# text_spalten — Excel-Datentyp Text (z. B. [18] Kalendertag „7.“)
 # html_formatierung — false: nur TSV; bei „blank“ kein HTML (Excel-Formeln/Spalten schuetzen)
 # Pro Spaltenindex nur in einer Typ-Liste; Aenderungen an cell_spec gelten nach Speichern sofort.
 #
@@ -130,6 +131,6 @@ datum_spalten = [1]    # Export nach Excel als Datum
 uhrzeit_spalten = [7, 8, 9, 10, 11, 12] # Export nach Excel als Zeit 
 integer_spalten = []   # Export nach Excel als Ganzzahl
 float_spalten = []     # Export nach Excel als Fließkommazahl
-text_spalten = [17]    # Export nach Excel als Text
-cell_spec = [ 0, 17, 7, 8, 9, 10, 11, 12, "blank", "blank", 16] # Export nach Excel als Spaltenreihenfolge
+text_spalten = [18]    # Export nach Excel als Text
+cell_spec = [ 0, 18, 7, 8, 9, 10, 11, 12, "blank", "blank", 16] # Export nach Excel als Spaltenreihenfolge
 

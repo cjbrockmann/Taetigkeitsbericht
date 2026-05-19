@@ -701,6 +701,9 @@ class ZeiteintragWindow(QMainWindow):
         horizontal_header.resizeSection(
             ZeiteintragSpalte.KOMMENTAR, ZeiteintragSpalte.KOMMENTAR_MIN_BREITE
         )
+        horizontal_header.resizeSection(
+            ZeiteintragSpalte.INFO, ZeiteintragSpalte.INFO_MIN_BREITE
+        )
         horizontal_header.resizeSection(ZeiteintragSpalte.TAG_EXCEL, 34)
         horizontal_header.resizeSection(
             ZeiteintragSpalte.FEIERTAGSNAME, ZeiteintragSpalte.NAME_SPALTE_BREITE
@@ -806,11 +809,16 @@ class ZeiteintragWindow(QMainWindow):
             selection_model.selectionChanged.connect(self._on_selection_changed)
 
     def _aktualisiere_kommentar_breite(self) -> None:
-        """Kommentarspalte: min. 200 px, Rest der Viewport-Breite; andere Spalten unveraendert."""
+        """Kommentar: min. KOMMENTAR_MIN_BREITE, Rest Viewport; Info: fest INFO_MIN_BREITE."""
         model = self._table.model()
         if model is None:
             return
         header = self._table.horizontalHeader()
+        if not self._table.isColumnHidden(ZeiteintragSpalte.INFO):
+            if header.sectionSize(ZeiteintragSpalte.INFO) != ZeiteintragSpalte.INFO_MIN_BREITE:
+                header.resizeSection(
+                    ZeiteintragSpalte.INFO, ZeiteintragSpalte.INFO_MIN_BREITE
+                )
         feste_breite = sum(
             header.sectionSize(col)
             for col in range(model.columnCount())
@@ -1328,7 +1336,10 @@ class ZeiteintragWindow(QMainWindow):
         self._view_model.uebernehme_stundenplan_in_zeile(row_idx, stundenplan_zeile)
 
         row = model.rows[row_idx]
-        if not row.anmerkung.strip():
+        if (
+            self._app_config.kommentar_urlaub_krank_modus != "kuerzel"
+            and not row.anmerkung.strip()
+        ):
             kommentar = stundenplan_zeile.anmerkung.strip()
             if kommentar:
                 model.setData(

@@ -28,9 +28,10 @@ class ZeiteintragSpalte:
     SOLL = 14
     VERTRAG = 15
     KOMMENTAR = 16
-    TAG_EXCEL = 17
-    FEIERTAGSNAME = 18
-    SCHULFERIENNAME = 19
+    INFO = 17
+    TAG_EXCEL = 18
+    FEIERTAGSNAME = 19
+    SCHULFERIENNAME = 20
 
     STATUS_KENNZEICHEN = frozenset(
         {URLAUB, KRANK, FEIERTAG_KZ, FERIEN, BETRIEBSFERIEN}
@@ -38,7 +39,8 @@ class ZeiteintragSpalte:
     ZEITFELDER = frozenset({VON, BIS, PAUSE1_VON, PAUSE1_BIS, PAUSE2_VON, PAUSE2_BIS})
 
     ZEIT_SPALTE_BREITE = 50
-    KOMMENTAR_MIN_BREITE = 200
+    KOMMENTAR_MIN_BREITE = 150
+    INFO_MIN_BREITE = 120
     NAME_SPALTE_BREITE = 120
 
 from Core.Domain.models.models_worktime import Feiertag
@@ -154,6 +156,7 @@ class ZeiteintragRow:
     pause2_beginn: str = ""
     pause2_ende: str = ""
     anmerkung: str = ""
+    info: str = ""
     geleistete_stunden: str = ""
     soll_stunden_nach_stundenplan: str = ""
     soll_stunden_nach_vertrag: str = ""
@@ -187,6 +190,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Soll",
         "Vertrag",
         "Kommentar",
+        "Info",
         "Tag",
         "Feiertagsname",
         "Schulferienname",
@@ -209,6 +213,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
         "Gesamt-Soll aus Stundenplan (Wochentag), nur erste Zeile je Tag, Format HH:MM",
         "Soll nach Vertrag, Format HH:MM",
         "Freitext (max. 80 Zeichen)",
+        "Stundenplan-Kommentar (nur Anzeige, nicht gespeichert)",
         "Kalendertag als Text für Excel (z. B. 7.)",
         "Name des Feiertags",
         "Name der Schulferien",
@@ -364,6 +369,8 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 return row.soll_stunden_nach_vertrag
             case ZeiteintragSpalte.KOMMENTAR:
                 return row.anmerkung
+            case ZeiteintragSpalte.INFO:
+                return row.info
             case ZeiteintragSpalte.TAG_EXCEL:
                 return self._kalendertag_mit_punkt_fuer_excel(row.datum)
             case ZeiteintragSpalte.FEIERTAGSNAME:
@@ -404,6 +411,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 ZeiteintragSpalte.GELEISTET,
                 ZeiteintragSpalte.SOLL,
                 ZeiteintragSpalte.VERTRAG,
+                ZeiteintragSpalte.INFO,
                 ZeiteintragSpalte.TAG_EXCEL,
                 ZeiteintragSpalte.FEIERTAGSNAME,
                 ZeiteintragSpalte.SCHULFERIENNAME,
@@ -460,6 +468,7 @@ class ZeiteintragTableModel(QAbstractTableModel):
                 ZeiteintragSpalte.GELEISTET,
                 ZeiteintragSpalte.SOLL,
                 ZeiteintragSpalte.VERTRAG,
+                ZeiteintragSpalte.INFO,
                 ZeiteintragSpalte.TAG_EXCEL,
                 ZeiteintragSpalte.FEIERTAGSNAME,
                 ZeiteintragSpalte.SCHULFERIENNAME,
