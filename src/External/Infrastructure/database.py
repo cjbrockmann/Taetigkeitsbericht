@@ -41,6 +41,53 @@ def _migrate_krankmeldung_spalten_entfernen(engine) -> None:
             conn.execute(text("ALTER TABLE krankmeldung DROP COLUMN krankmeldungstagsname"))
 
 
+_MANDANT_ID_TABELLEN = ("zeiteintrag", "stundenplan", "betriebsferien")
+
+
+def _sqlite_table_exists(conn, table_name: str) -> bool:
+    row = conn.execute(
+        text(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name LIMIT 1"
+        ),
+        {"name": table_name},
+    ).fetchone()
+    return row is not None
+
+
+def _sqlite_table_column_info(conn, table_name: str) -> dict[str, tuple[int, object]]:
+    """Spaltenname -> (notnull, dflt_value) aus PRAGMA table_info."""
+    rows = conn.execute(text(f"PRAGMA table_info({table_name})")).fetchall()
+    return {row[1]: (row[3], row[4]) for row in rows}
+
+
+def _migrate_mandant_id_spalten_und_indizes(engine) -> None:
+    """mandant_id NOT NULL DEFAULT 1 und Index auf zeiteintrag, stundenplan, betriebsferien."""
+    if not str(engine.url).startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        for table in _MANDANT_ID_TABELLEN:
+            if not _sqlite_table_exists(conn, table):
+                continue
+            cols = _sqlite_table_column_info(conn, table)
+            if "mandant_id" not in cols:
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} ADD COLUMN mandant_id "
+                        "INTEGER NOT NULL DEFAULT 1"
+                    )
+                )
+            else:
+                conn.execute(
+                    text(f"UPDATE {table} SET mandant_id = 1 WHERE mandant_id IS NULL")
+                )
+            conn.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS ix_{table}_mandant_id "
+                    f"ON {table} (mandant_id)"
+                )
+            )
+
+
 def _migrate_feiertag_umfang_spalten(engine) -> None:
     if not str(engine.url).startswith("sqlite"):
         return
@@ -77,3 +124,4 @@ def init_db(engine) -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_krankmeldung_spalten_entfernen(engine)
     _migrate_feiertag_umfang_spalten(engine)
+    _migrate_mandant_id_spalten_und_indizes(engine)

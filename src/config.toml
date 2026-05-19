@@ -96,10 +96,12 @@ ausgeblendete_spalten = []
 
 [zeiteintrag_tabelle]
 # Spalte 17 = Kalendertag fuer Excel (nur Export, bleibt fuer cell_spec erhalten)
-ausgeblendete_spalten = [17, 18, 19]
+ausgeblendete_spalten = [18, 19]
 # Status-Kennzeichen (F, U, K, Sf, Bf) mit gleichem Grau wie Wochenendzeilen (#eeeeee).
 # Leere Liste [] = keine graue Hervorhebung; weglassen = Standard [2, 3, 4, 5, 6].
 grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
+
+# -------------------------------------------------------------------------------------------------------------
 
 
 # Zeiteintrag: Button „Fuer Excel kopieren“ (tab-getrennte Zwischenablage).
@@ -120,14 +122,14 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 # Pro Spaltenindex nur in einer Typ-Liste; Aenderungen an cell_spec gelten nach Speichern sofort.
 #
 [zeiteintrag_excel_export]
-include_header = false
-leading_empty_columns = 0
-trailing_empty_columns = 0
-html_formatierung = true
-uhrzeit_spalten = [7, 8, 9, 10, 11, 12]
-datum_spalten = [1]
-integer_spalten = []
-float_spalten = []
-text_spalten = [17]
-cell_spec = [ 0, 17, 7, 8, 9, 10, 11, 12, "blank", "blank", 16]
+include_header = false       # Beim Export nach Excel, Header miteinschliessen 
+leading_empty_columns = 0    # Beim Export nach Excel, leere Spalten am Anfang der Zeile
+trailing_empty_columns = 0   # Beim Export nach Excel, leere Spalten am Ende der Zeile
+html_formatierung = true     # Beim Export nach Excel, HTML-Formatierung verwenden  
+datum_spalten = [1]    # Export nach Excel als Datum
+uhrzeit_spalten = [7, 8, 9, 10, 11, 12] # Export nach Excel als Zeit 
+integer_spalten = []   # Export nach Excel als Ganzzahl
+float_spalten = []     # Export nach Excel als Fließkommazahl
+text_spalten = [17]    # Export nach Excel als Text
+cell_spec = [ 0, 17, 7, 8, 9, 10, 11, 12, "blank", "blank", 16] # Export nach Excel als Spaltenreihenfolge
 

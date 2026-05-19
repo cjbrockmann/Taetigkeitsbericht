@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, time
 from typing import Optional
 
-from sqlalchemy import Column, String
+from sqlalchemy import Column, Integer, String
 from sqlmodel import Field, SQLModel
 
 
@@ -11,7 +11,10 @@ class ZeiteintragTable(SQLModel, table=True):
     __tablename__ = "zeiteintrag"
 
     id: str = Field(sa_column=Column(String(36), primary_key=True))
-    mandant_id: int
+    mandant_id: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1", index=True),
+    )
     datum: date
     uhrzeit_von: time
     uhrzeit_bis: time
@@ -26,7 +29,10 @@ class StundenplanTable(SQLModel, table=True):
     __tablename__ = "stundenplan"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    mandant_id: int
+    mandant_id: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1", index=True),
+    )
     wochentag: int = Field(ge=1, le=7)
     uhrzeit_von: time
     uhrzeit_bis: time
@@ -71,7 +77,10 @@ class BetriebsferienTable(SQLModel, table=True):
     __tablename__ = "betriebsferien"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    mandant_id: int
+    mandant_id: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1", index=True),
+    )
     datum_von: date
     datum_bis: date
     betriebsferienname: str = Field(max_length=80)
