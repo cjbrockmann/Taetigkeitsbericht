@@ -219,7 +219,7 @@ def html_tabelle_fuer_excel(
 def _tsv_feld(
     zelle: ExcelExportZelle, *, leere_als_leerzeichen: bool
 ) -> str:
-    """BLANK unveraendert; bei reinem TSV-Export leere Felder als „ “ zum Ueberschreiben in Excel."""
+    """BLANK unveraendert; leere Felder im TSV als „ “ (LibreOffice Calc / Excel beim TSV-Einfuegen)."""
     if zelle.typ == ExcelZelltyp.BLANK:
         return zelle.text
     if leere_als_leerzeichen and not zelle.text.strip():
@@ -394,7 +394,9 @@ def setze_excel_zwischenablage(
     formate = zwischenablage_excel_formate(
         spreadsheet_xml_formatierung=spreadsheet_xml_formatierung,
     )
-    leere_als_leerzeichen = formate == frozenset({"tsv"})
+    # TSV liegt immer in der Zwischenablage; Calc nutzt ihn — leere Felder als „ “
+    # ueberschreiben alte Zellinhalte (unabhaengig von zusaetzlichem Spreadsheet-XML).
+    leere_als_leerzeichen = True
 
     tsv = "\n".join(
         tsv_zeile(row, leere_als_leerzeichen=leere_als_leerzeichen) for row in zeilen

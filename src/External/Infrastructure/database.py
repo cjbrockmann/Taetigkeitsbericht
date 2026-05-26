@@ -41,7 +41,14 @@ def _migrate_krankmeldung_spalten_entfernen(engine) -> None:
             conn.execute(text("ALTER TABLE krankmeldung DROP COLUMN krankmeldungstagsname"))
 
 
-_MANDANT_ID_TABELLEN = ("zeiteintrag", "stundenplan", "betriebsferien")
+_MANDANT_ID_TABELLEN = (
+    "zeiteintrag",
+    "stundenplan",
+    "betriebsferien",
+    "guthaben_urlaub",
+    "guthaben_stunden",
+    "sollstunden_vertrag",
+)
 
 
 def _sqlite_table_exists(conn, table_name: str) -> bool:
@@ -118,6 +125,79 @@ def _migrate_feiertag_umfang_spalten(engine) -> None:
             )
 
 
+def _migrate_guthaben_stunden_defizit_nach_negativem_saldo(engine) -> None:
+    """Ältere Defizit-Spalten in negative Salden in den Guthaben-Feldern überführen."""
+    if not str(engine.url).startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        if not _sqlite_table_exists(conn, "guthaben_stunden"):
+            return
+        cols = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(guthaben_stunden)")).fetchall()
+        }
+        if "stunden_defizit_monatsende_aktuell" not in cols:
+            return
+        conn.execute(
+            text(
+                "UPDATE guthaben_stunden "
+                "SET stunden_guthaben_monatsende_aktuell = "
+                "-stunden_defizit_monatsende_aktuell "
+                "WHERE stunden_defizit_monatsende_aktuell > 0 "
+                "AND stunden_guthaben_monatsende_aktuell <= 0"
+            )
+        )
+        if "stunden_defizit_vormonat" in cols:
+            conn.execute(
+                text(
+                    "UPDATE guthaben_stunden "
+                    "SET stunden_guthaben_vormonat = -stunden_defizit_vormonat "
+                    "WHERE stunden_defizit_vormonat > 0 "
+                    "AND stunden_guthaben_vormonat <= 0"
+                )
+            )
+
+
+def _migrate_guthaben_stunden_vormonat_manuell(engine) -> None:
+    if not str(engine.url).startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        if not _sqlite_table_exists(conn, "guthaben_stunden"):
+            return
+        cols = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(guthaben_stunden)")).fetchall()
+        }
+        if "stunden_guthaben_vormonat_manuell" not in cols:
+            conn.execute(
+                text(
+                    "ALTER TABLE guthaben_stunden "
+                    "ADD COLUMN stunden_guthaben_vormonat_manuell REAL"
+                )
+            )
+
+
+def _migrate_guthaben_stunden_manuell_leerstring_nach_null(engine) -> None:
+    if not str(engine.url).startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        if not _sqlite_table_exists(conn, "guthaben_stunden"):
+            return
+        cols = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(guthaben_stunden)")).fetchall()
+        }
+        if "stunden_guthaben_vormonat_manuell" not in cols:
+            return
+        conn.execute(
+            text(
+                "UPDATE guthaben_stunden "
+                "SET stunden_guthaben_vormonat_manuell = NULL "
+                "WHERE stunden_guthaben_vormonat_manuell = ''"
+            )
+        )
+
+
 def init_db(engine) -> None:
     import External.Infrastructure.sqlmodel_tables  # noqa: F401 - Tabellen bei SQLModel registrieren
 
@@ -125,3 +205,6 @@ def init_db(engine) -> None:
     _migrate_krankmeldung_spalten_entfernen(engine)
     _migrate_feiertag_umfang_spalten(engine)
     _migrate_mandant_id_spalten_und_indizes(engine)
+    _migrate_guthaben_stunden_vormonat_manuell(engine)
+    _migrate_guthaben_stunden_defizit_nach_negativem_saldo(engine)
+    _migrate_guthaben_stunden_manuell_leerstring_nach_null(engine)

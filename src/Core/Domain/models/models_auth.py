@@ -20,3 +20,4 @@ class Login(BaseModel):
     logintrycounter: int = Field(ge=0, description="Anzahl der Login-Versuche")
     success: bool = Field(description="Kennzeichnet erfolgreichen Login")
     token: Optional[str] = Field(default=None, max_length=250, description="Anmeldetoken")
+

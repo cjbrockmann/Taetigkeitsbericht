@@ -192,7 +192,7 @@ class StundenplanView(QWidget):
         self._view_model.set_mandant_id(mandant_id)
 
     def bei_mandant_gewechselt(self) -> None:
-        self._lade_alle(registry_benachrichtigen=False)
+        self._lade_alle(zeiteintraege_benachrichtigen=False)
 
     def verwerfe_ungespeicherte_aenderungen(self) -> None:
         self._lade_alle()
@@ -285,10 +285,10 @@ class StundenplanView(QWidget):
         txt = minuten_als_hh_mm(summe_min)
         self._summen_label.setText(f"Soll: {txt}")
 
-    def _lade_alle(self, *, registry_benachrichtigen: bool = True) -> None:
+    def _lade_alle(self, *, zeiteintraege_benachrichtigen: bool = True) -> None:
         self._suspend_dirty_tracking = True
         try:
-            self._view_model.lade_alle(registry_benachrichtigen=registry_benachrichtigen)
+            self._view_model.lade_alle(zeiteintraege_benachrichtigen=zeiteintraege_benachrichtigen)
         finally:
             self._suspend_dirty_tracking = False
         self._capture_baseline()
@@ -359,7 +359,7 @@ class StundenplanView(QWidget):
     def _auf_stundenplan_tabelle_inhalt(self, *_args) -> None:
         if self._suspend_dirty_tracking:
             return
-        self._view_model.synchronisiere_registry_mit_tabelle()
+        self._view_model.benachrichtige_zeiteintraege()
 
     def _capture_baseline(self) -> None:
         self._baseline_rows = self._current_rows_snapshot()

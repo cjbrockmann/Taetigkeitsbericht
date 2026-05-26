@@ -11,6 +11,8 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from App.app_config import AppConfig, load_app_config
+from App.sollstunden_vertrag_sync import importiere_sollstunden_vertraege_beim_erststart
+from Core.Application.sollstunden_vertrag_anwendung import SollstundenVertragAnwendung
 from Core.Application.di import ApplicationDIModule
 from Core.Application.betriebsferien_anwendung import BetriebsferienAnwendung
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
@@ -30,7 +32,7 @@ def create_injector(
     if app_config is None:
         app_config = load_app_config()
     config = InfrastructureConfig(database_url=database_url)
-    return Injector(
+    injector = Injector(
         [
             InfrastructureDIModule(),
             ApplicationDIModule(),
@@ -39,6 +41,12 @@ def create_injector(
             lambda binder: binder.bind(AppConfig, to=app_config),
         ]
     )
+    importiere_sollstunden_vertraege_beim_erststart(
+        SRC_ROOT,
+        injector.get(SollstundenVertragAnwendung),
+        backup_erstellen=app_config.sollstunden_vertrag_backup_erstellen,
+    )
+    return injector
 
 
 def build_applications(injector_instance: Injector) -> tuple[

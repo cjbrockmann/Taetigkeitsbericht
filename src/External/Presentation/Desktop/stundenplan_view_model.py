@@ -7,7 +7,6 @@ from PySide6.QtCore import QObject, Signal
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
 from Core.Domain.models.models_worktime import Stundenplan
 from External.Presentation.Desktop.arbeitszeit_berechnung import zeit_aus_text
-from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
 from External.Presentation.Desktop.stundenplan_table_model import (
     StundenplanRow,
     StundenplanTableModel,
@@ -17,15 +16,11 @@ from External.Presentation.Desktop.stundenplan_table_model import (
 class StundenplanViewModel(QObject):
     status_changed = Signal(str)
     error_occurred = Signal(str)
+    stundenplan_geaendert = Signal()
 
-    def __init__(
-        self,
-        anwendung: StundenplanAnwendung,
-        stundenplan_registry: StundenplanRegistry,
-    ) -> None:
+    def __init__(self, anwendung: StundenplanAnwendung) -> None:
         super().__init__()
         self._anwendung = anwendung
-        self._stundenplan_registry = stundenplan_registry
         self._table_model = StundenplanTableModel()
         self._eintraege_cache: list[Stundenplan] = []
         self._zu_loeschende_ids: list[int] = []
@@ -47,24 +42,21 @@ class StundenplanViewModel(QObject):
     def zu_loeschende_ids(self) -> list[int]:
         return list(self._zu_loeschende_ids)
 
-    def lade_alle(self, *, registry_benachrichtigen: bool = True) -> None:
+    def lade_alle(self, *, zeiteintraege_benachrichtigen: bool = True) -> None:
         eintraege = self._anwendung.liste(self._aktuelle_mandant_id())
         self._eintraege_cache = list(eintraege)
         rows = [self._map_to_row(eintrag) for eintrag in eintraege]
         self._table_model.set_rows(rows)
         self._zu_loeschende_ids.clear()
-        self._stundenplan_registry.aktualisiere_aus_zeilen(
-            rows, benachrichtigen=registry_benachrichtigen
-        )
+        if zeiteintraege_benachrichtigen:
+            self.stundenplan_geaendert.emit()
         self.status_changed.emit(
             f"{len(rows)} Stundenplan-Eintrag/-einträge geladen."
         )
 
-    def synchronisiere_registry_mit_tabelle(self) -> None:
-        self._stundenplan_registry.aktualisiere_aus_zeilen(
-            self._table_model.rows,
-            benachrichtigen=True,
-        )
+    def benachrichtige_zeiteintraege(self) -> None:
+        """Stundenplan-Tabelle geändert (inkl. ungespeichert) → Zeiteinträge neu berechnen."""
+        self.stundenplan_geaendert.emit()
 
     def stundenplan_eintraege_aus_tabelle(self) -> list[Stundenplan]:
         """Alle gueltigen Zeilen der Stundenplan-Tabelle als Domain-Objekte."""

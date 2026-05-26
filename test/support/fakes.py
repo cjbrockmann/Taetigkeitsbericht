@@ -4,17 +4,24 @@ from datetime import date
 from typing import Optional
 from uuid import UUID, uuid4
 
+from App.app_config import _hh_mm_zu_dezimalstunden
+from Core.Application.guthaben_stunden_anwendung import GuthabenStundenAnwendung
+from Core.Application.sollstunden_vertrag_anwendung import SollstundenVertragAnwendung
 from Core.Application.zeiteintrag_dto_anwendung import ZeiteintragAnwendungDTO
 from Core.Domain.models.models_worktime import (
     Betriebsferien,
     Feiertag,
     Krankmeldung,
     Schulferien,
+    GuthabenStunden,
+    SollstundenVertrag,
     Stundenplan,
     Urlaubsantrag,
     Zeiteintrag,
 )
 from Core.Domain.services.betriebsferien_service import BetriebsferienService
+from Core.Domain.services.guthaben_stunden_service import GuthabenStundenService
+from Core.Domain.services.sollstunden_vertrag_service import SollstundenVertragService
 from Core.Domain.services.feiertag_service import FeiertagService
 from Core.Domain.services.krankmeldung_service import KrankmeldungService
 from Core.Domain.services.schulferien_service import SchulferienService
@@ -231,6 +238,128 @@ class _SchulferienListRepo:
         ]
 
 
+_WOCHENTAG_FELDER = (
+    "Montag",
+    "Dienstag",
+    "Mittwoch",
+    "Donnerstag",
+    "Freitag",
+    "Samstag",
+    "Sonntag",
+)
+
+
+class InMemorySollstundenVertragRepository:
+    def __init__(self) -> None:
+        self._items: list[SollstundenVertrag] = []
+        self._next_id = 1
+
+    def save(self, vertrag: SollstundenVertrag) -> SollstundenVertrag:
+        if vertrag.id is None:
+            saved = vertrag.model_copy(update={"id": self._next_id})
+            self._next_id += 1
+            self._items.append(saved)
+            return saved
+        for index, vorhanden in enumerate(self._items):
+            if vorhanden.id == vertrag.id:
+                self._items[index] = vertrag
+                return vertrag
+        self._items.append(vertrag)
+        return vertrag
+
+    def get_by_id(self, mandant_id: int, vertrag_id: int) -> Optional[SollstundenVertrag]:
+        for vertrag in self._items:
+            if vertrag.id == vertrag_id and vertrag.mandant_id == mandant_id:
+                return vertrag
+        return None
+
+    def list_all(self, mandant_id: int) -> list[SollstundenVertrag]:
+        return [v for v in self._items if v.mandant_id == mandant_id]
+
+    def get_gueltig_fuer_datum(
+        self, mandant_id: int, datum: date
+    ) -> Optional[SollstundenVertrag]:
+        gueltig = [
+            v
+            for v in self._items
+            if v.mandant_id == mandant_id
+            and v.effective_date <= datum
+            and (v.discontinued_date is None or v.discontinued_date > datum)
+        ]
+        if not gueltig:
+            return None
+        return max(gueltig, key=lambda v: v.effective_date)
+
+    def delete_by_id(self, mandant_id: int, vertrag_id: int) -> bool:
+        for index, vertrag in enumerate(self._items):
+            if vertrag.id == vertrag_id and vertrag.mandant_id == mandant_id:
+                del self._items[index]
+                return True
+        return False
+
+
+class InMemoryGuthabenStundenRepository:
+    def __init__(self) -> None:
+        self._items: list[GuthabenStunden] = []
+        self._next_id = 1
+
+    def save(self, eintrag: GuthabenStunden) -> GuthabenStunden:
+        if eintrag.id is None:
+            saved = eintrag.model_copy(update={"id": self._next_id})
+            self._next_id += 1
+            self._items.append(saved)
+            return saved
+        for index, vorhanden in enumerate(self._items):
+            if vorhanden.id == eintrag.id:
+                self._items[index] = eintrag
+                return eintrag
+        self._items.append(eintrag)
+        return eintrag
+
+    def get_by_id(self, mandant_id: int, eintrag_id: int) -> Optional[GuthabenStunden]:
+        for eintrag in self._items:
+            if eintrag.id == eintrag_id and eintrag.mandant_id == mandant_id:
+                return eintrag
+        return None
+
+    def get_by_mandant_und_datum(
+        self, mandant_id: int, datum: date
+    ) -> Optional[GuthabenStunden]:
+        for eintrag in self._items:
+            if eintrag.mandant_id == mandant_id and eintrag.datum == datum:
+                return eintrag
+        return None
+
+    def list_all(
+        self, mandant_id: int, jahr: Optional[int] = None
+    ) -> list[GuthabenStunden]:
+        items = [e for e in self._items if e.mandant_id == mandant_id]
+        if jahr is None:
+            return items
+        return [e for e in items if e.datum.year == jahr]
+
+    def delete_by_id(self, mandant_id: int, eintrag_id: int) -> bool:
+        for index, eintrag in enumerate(self._items):
+            if eintrag.id == eintrag_id and eintrag.mandant_id == mandant_id:
+                del self._items[index]
+                return True
+        return False
+
+
+def _sollstunden_vertrag_aus_mapping(
+    mandant_id: int, stunden_nach_wochentag: dict[int, str]
+) -> SollstundenVertrag:
+    felder = {
+        feld: _hh_mm_zu_dezimalstunden(stunden_nach_wochentag.get(index, "00:00"))
+        for index, feld in enumerate(_WOCHENTAG_FELDER, start=1)
+    }
+    return SollstundenVertrag(
+        mandant_id=mandant_id,
+        effective_date=date(2000, 1, 1),
+        **felder,
+    )
+
+
 def dto_anwendung(
     *,
     zeiteintraege: list[Zeiteintrag] | None = None,
@@ -241,6 +370,7 @@ def dto_anwendung(
     betriebsferien: list[Betriebsferien] | None = None,
     stundenplan: list[Stundenplan] | None = None,
     vertrag_stunden: dict[int, str] | None = None,
+    mandant_id: int = 1,
 ) -> ZeiteintragAnwendungDTO:
     ze_repo = InMemoryZeiteintragRepository()
     if zeiteintraege:
@@ -254,6 +384,28 @@ def dto_anwendung(
     betriebsferien = betriebsferien or []
     stundenplan = stundenplan or []
 
+    sv_repo = InMemorySollstundenVertragRepository()
+    sv_anwendung = SollstundenVertragAnwendung(SollstundenVertragService(sv_repo))
+    sv_anwendung.erfasse(
+        _sollstunden_vertrag_aus_mapping(
+            mandant_id,
+            vertrag_stunden
+            or {
+                1: "08:00",
+                2: "08:00",
+                3: "08:00",
+                4: "08:00",
+                5: "08:00",
+                6: "00:00",
+                7: "00:00",
+            },
+        )
+    )
+
+    gs_anwendung = GuthabenStundenAnwendung(
+        GuthabenStundenService(InMemoryGuthabenStundenRepository())
+    )
+
     app = ZeiteintragAnwendungDTO(
         ZeiteintragService(ze_repo),
         StundenplanService(InMemoryStundenplanRepository(stundenplan)),
@@ -262,10 +414,8 @@ def dto_anwendung(
         KrankmeldungService(_KrankListRepo(krank)),
         SchulferienService(_SchulferienListRepo(schulferien)),
         BetriebsferienService(InMemoryBetriebsferienRepository(betriebsferien)),
-    )
-    app.set_vertrag_stunden_nach_wochentag(
-        vertrag_stunden
-        or {1: "08:00", 2: "08:00", 3: "08:00", 4: "08:00", 5: "08:00", 6: "00:00", 7: "00:00"}
+        sv_anwendung,
+        gs_anwendung,
     )
     app.set_kommentar_urlaubstage("U")
     app.set_kommentar_krankheitstage("K")

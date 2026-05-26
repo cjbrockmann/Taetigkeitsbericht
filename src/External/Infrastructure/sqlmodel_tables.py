@@ -95,3 +95,51 @@ class SchulferienTable(SQLModel, table=True):
     datum_bis: date
     schulferienname: str = Field(max_length=80)
     anmerkung: Optional[str] = Field(default=None, max_length=80)
+
+
+class GuthabenUrlaubTable(SQLModel, table=True):
+    __tablename__ = "guthaben_urlaub"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mandant_id: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1", index=True),
+    )
+    datum: date
+    urlaubstage_guthaben_vorjahr: float = Field(default=0, ge=0)
+    urlaubstage_guthaben_vormonat: float = Field(default=0, ge=0)
+    urlaubstage_im_monat_aktuell: float = Field(default=0, ge=0)
+    guthaben_vormonat_korrektur: Optional[float] = Field(default=None, ge=0)
+
+
+class GuthabenStundenTable(SQLModel, table=True):
+    __tablename__ = "guthaben_stunden"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mandant_id: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1", index=True),
+    )
+    datum: date
+    stunden_guthaben_vormonat: float = Field(default=0)
+    stunden_guthaben_vormonat_manuell: Optional[float] = Field(default=None, ge=0)
+    stunden_guthaben_monatsende_aktuell: float = Field(default=0)
+
+
+class SollstundenVertragTable(SQLModel, table=True):
+    __tablename__ = "sollstunden_vertrag"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    mandant_id: int = Field(
+        default=1,
+        sa_column=Column(Integer, nullable=False, server_default="1", index=True),
+    )
+    effective_date: date
+    discontinued_date: Optional[date] = None
+    Montag: float = Field(default=0, ge=0)
+    Dienstag: float = Field(default=0, ge=0)
+    Mittwoch: float = Field(default=0, ge=0)
+    Donnerstag: float = Field(default=0, ge=0)
+    Freitag: float = Field(default=0, ge=0)
+    Samstag: float = Field(default=0, ge=0)
+    Sonntag: float = Field(default=0, ge=0)

@@ -1,0 +1,5 @@
+[mandanten]
+mandanten = [
+    { name = "Kindergarten Bonifatius", kuerzel = "Bonifatius", id = 1, foreground_color = "#FFFFFF", background_color = "#5A62C8", rowcounter_color = "#0000AA", effective_date = "2026-01-01", discontinued_date = "" },
+    { name = "Kindergarten Frauenstein", kuerzel = "Frauenstein", id = 2, foreground_color = "#FFFFFF", background_color = "#C05858", rowcounter_color = "#AA0000", effective_date = "2026-01-01", discontinued_date = "" },
+]

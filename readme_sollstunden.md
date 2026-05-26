@@ -6,7 +6,7 @@ Die Sollwerte, Tages-Flags (Urlaub, Feiertag, …) und Kommentarregeln werden in
 
 ## Sollstunden nach Vertrag
 
-- Quelle: ausschließlich `[sollstunden].wochenstunden` in `src/config.toml` (Zuordnung Wochentag → Stunden, 1 = Montag … 7 = Sonntag, inkl. Samstag und Sonntag).
+- Quelle: Tabelle `sollstunden_vertrag` in der Datenbank. Beim **ersten Start** (leere Tabelle) Import aus `src/sollstunden_vertrag.toml`. Optional `sollstunden_vertrag_backup_erstellen = true` in `config.toml` → Backup nach `sollstunden_vertrag_backup.toml` und Platzhalter; bei `false` bleibt die TOML unverändert. `ZeiteintragAnwendungDTO` liest Vertragssoll datumsabhängig per `hole_gueltig_fuer_datum`. Wochentag 1 = Montag … 7 = Sonntag.
 - Anzeige nur in der **ersten Tabellenzeile** je Kalendertag.
 - Kein Wert, wenn für den Wochentag in der Config kein Eintrag steht oder die Zeit `0:00` ist.
 - **Feiertage:** Steuert `[sollstunden].sollstunden_an_feiertagen`. Ist der Wert `false` (Standard), entfällt das Vertrags-Soll an Feiertagen; ist er `true`, gilt wie an einem normalen Tag nur der Wochentag aus `wochenstunden`.

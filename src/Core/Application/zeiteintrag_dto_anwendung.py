@@ -5,10 +5,19 @@ from datetime import date, datetime, time
 from typing import Optional
 from uuid import UUID
 
+from Core.Application.guthaben_stunden_anwendung import GuthabenStundenAnwendung
+from Core.Application.sollstunden_vertrag_anwendung import SollstundenVertragAnwendung
 from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung
+from Core.Application.zeiteintrag_dto_guthabenberechnung_helper import (
+    GuthabenAmMonatsanfang,
+    GuthabenVerrechnungErgebnis,
+    ZeiteintragDtoGuthabenberechnungHelper,
+    ZeiteintragMonatMitGuthaben,
+)
 from Core.Domain.models.models_worktime import (
     Betriebsferien,
     Feiertag,
+    GuthabenStunden,
     Krankmeldung,
     Schulferien,
     Stundenplan,
@@ -24,18 +33,32 @@ from Core.Domain.services.stundenplan_service import StundenplanService
 from Core.Domain.services.urlaubsantrag_service import UrlaubsantragService
 from Core.Domain.services.zeiteintrag_service import ZeiteintragService
 
+__all__ = [
+    "GuthabenAmMonatsanfang",
+    "GuthabenVerrechnungErgebnis",
+    "ZeiteintragAnwendungDTO",
+    "ZeiteintragMonatMitGuthaben",
+]
+
 
 class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
     _MAX_ANMERKUNG_LAENGE = 80
 
-    def __init__(self, serviceZeiteintrag: ZeiteintragService, 
-               serviceStundenplan: StundenplanService, 
-               serviceFeiertage: FeiertagService, 
-               serviceUrlaub: UrlaubsantragService,
-               serviceKrank: KrankmeldungService,
-               serviceSchulferien: SchulferienService,
-               serviceBetriebsferien: BetriebsferienService,
-               ) -> None:
+    #: DB-Eintrag guthaben_stunden zum 1. des zuletzt verrechneten Monats (nach guthaben_verrechnen).
+    guthaben_stunden_laufender_monat: GuthabenStunden | None = None
+
+    def __init__(
+        self,
+        serviceZeiteintrag: ZeiteintragService,
+        serviceStundenplan: StundenplanService,
+        serviceFeiertage: FeiertagService,
+        serviceUrlaub: UrlaubsantragService,
+        serviceKrank: KrankmeldungService,
+        serviceSchulferien: SchulferienService,
+        serviceBetriebsferien: BetriebsferienService,
+        sollstunden_vertrag_anwendung: SollstundenVertragAnwendung,
+        guthaben_stunden_anwendung: GuthabenStundenAnwendung,
+    ) -> None:
         super().__init__(serviceZeiteintrag)
         self._serviceStundenplan = serviceStundenplan
         self._serviceFeiertage = serviceFeiertage
@@ -43,6 +66,10 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self._serviceKrank = serviceKrank
         self._serviceSchulferien = serviceSchulferien
         self._serviceBetriebsferien = serviceBetriebsferien
+        self._sollstunden_vertrag_anwendung = sollstunden_vertrag_anwendung
+        self._guthaben_helper = ZeiteintragDtoGuthabenberechnungHelper(
+            guthaben_stunden_anwendung
+        )
         self.stundenplan_eintraege: list[Stundenplan] = []
         self.feiertage: list[Feiertag] = []
         self.urlaubsantraege: list[Urlaubsantrag] = []
@@ -51,7 +78,6 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self.betriebsferien: list[Betriebsferien] = []
         self._geladenes_jahr: Optional[int] = None
         self._geladenes_mandant_id: Optional[int] = None
-        self._vertrag_stunden_nach_wochentag: dict[int, str] = {}
         self._sollstunden_an_feiertagen: bool = False
         self._kommentar_urlaubstage: str = ""
         self._kommentar_krankheitstage: str = ""
@@ -141,6 +167,72 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
             self.anreichere_eintraege_fuer_tag(eintraege_fuer_tag)
 
         return alle_eintraege
+
+    def liste_im_monat_mit_guthaben(
+        self,
+        mandant_id: int,
+        jahr: int,
+        monat: int,
+        *,
+        stundenplan_eintraege: list[Stundenplan] | None = None,
+        persistieren: bool = True,
+    ) -> ZeiteintragMonatMitGuthaben:
+        """
+        Wie liste_im_monat, zusaetzlich mit Verrechnung und DB-Bezug zum Monatsersten.
+
+        persistieren: schreibt guthaben_stunden (Monatsende + Folgemonat-Vormonat).
+        """
+        eintraege = self.liste_im_monat(
+            mandant_id,
+            jahr,
+            monat,
+            stundenplan_eintraege=stundenplan_eintraege,
+        )
+        monat_mit_guthaben = self._guthaben_helper.monat_mit_guthaben(
+            mandant_id, jahr, monat, eintraege, persistieren=persistieren
+        )
+        self.guthaben_stunden_laufender_monat = (
+            self._guthaben_helper.guthaben_stunden_laufender_monat
+        )
+        return monat_mit_guthaben
+
+    def aktualisiere_guthaben_im_monat(
+        self,
+        mandant_id: int,
+        jahr: int,
+        monat: int,
+        *,
+        stundenplan_eintraege: list[Stundenplan] | None = None,
+    ) -> GuthabenVerrechnungErgebnis:
+        """Nach Änderung an Zeiteinträgen Guthaben neu verrechnen und persistieren."""
+        if stundenplan_eintraege is not None:
+            self.stundenplan_eintraege = list(stundenplan_eintraege)
+        eintraege = self.liste_im_monat(mandant_id, jahr, monat)
+        return self.guthaben_verrechnen(mandant_id, jahr, monat, eintraege=eintraege)
+
+    def guthaben_verrechnen(
+        self,
+        mandant_id: int,
+        jahr: int,
+        monat: int,
+        *,
+        eintraege: list[ZeiteintragsDTO] | None = None,
+    ) -> GuthabenVerrechnungErgebnis:
+        """
+        Verrechnet Zeitguthaben/-defizit aus Ist, Soll (Stundenplan/Vertrag) und Vormonat.
+
+        Speichert stunden_guthaben_monatsende_aktuell am 1. des laufenden Monats sowie
+        stunden_guthaben_vormonat am 1. des Folgemonats (Übertrag positives Guthaben).
+        """
+        if eintraege is None:
+            eintraege = self.liste_im_monat(mandant_id, jahr, monat)
+        ergebnis = self._guthaben_helper.guthaben_verrechnen(
+            mandant_id, jahr, monat, eintraege=eintraege
+        )
+        self.guthaben_stunden_laufender_monat = (
+            self._guthaben_helper.guthaben_stunden_laufender_monat
+        )
+        return ergebnis
 
     def anreichere_eintraege_fuer_tag(self, eintraege: list[ZeiteintragsDTO]) -> None:
         """Flags, Kommentarregeln und Soll-Felder fuer alle Zeilen eines Kalendertags."""
@@ -289,10 +381,6 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
                     sek
                 )
 
-    def set_vertrag_stunden_nach_wochentag(self, mapping: dict[int, str]) -> None:
-        """Setzt das Mapping von Wochentag zu Vertragsarbeitszeit (z.B. {1: '08:00', ...})."""
-        self._vertrag_stunden_nach_wochentag = dict(mapping)
-
     def set_sollstunden_an_feiertagen(self, aktiv: bool) -> None:
         """Ob Vertrags-Soll an Feiertagen angezeigt wird ([sollstunden].sollstunden_an_feiertagen)."""
         self._sollstunden_an_feiertagen = aktiv
@@ -306,7 +394,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         self._kommentar_krankheitstage = text.strip()
 
     def set_kommentar_urlaub_krank_modus(self, modus: str) -> None:
-        """praefix = „U: …“ / „K: …“; kuerzel = nur „U“ / „K“ ([wochenstunden].kommentar_urlaub_krank_modus)."""
+        """praefix = „U: …“ / „K: …“; kuerzel = nur „U“ / „K“ ([kommentar].kommentar_urlaub_krank_modus)."""
         m = modus.strip().lower()
         if m == "prefix":
             m = "praefix"
@@ -428,13 +516,25 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         for eintrag in eintraege:
             eintrag.soll_stunden_nach_Stundenplan = eintrag.soll_stunden_nach_vertrag
 
-    def _berechne_soll_stunden_nach_vertrag(self, datum: date) -> time | None:
-        """Soll-Arbeitszeit nach Vertrag: config.toml ([sollstunden].wochenstunden), je Wochentag."""
+    def _berechne_soll_stunden_nach_vertrag(
+        self, datum: date, mandant_id: int | None = None
+    ) -> time | None:
+        """Soll-Arbeitszeit nach Vertrag aus der Datenbank (SollstundenVertrag), je Wochentag."""
         if not self._sollstunden_an_feiertagen and any(
             f.datum == datum for f in self.feiertage
         ):
             return None
-        soll_str = self._vertrag_stunden_nach_wochentag.get(datum.isoweekday(), "").strip()
+        mid = mandant_id if mandant_id is not None else self._geladenes_mandant_id
+        if mid is None:
+            return None
+        from App.app_config import vertrag_stunden_nach_wochentag
+
+        vertrag = self._sollstunden_vertrag_anwendung.hole_gueltig_fuer_datum(mid, datum)
+        if vertrag is None:
+            return None
+        soll_str = vertrag_stunden_nach_wochentag(vertrag).get(
+            datum.isoweekday(), ""
+        ).strip()
         if not soll_str:
             return None
 
@@ -538,7 +638,9 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         hat_arbeit = self._tag_hat_geleistete_arbeitszeit(eintraege)
         vertrag_soll = None
         if ist_urlaub or ist_krank:
-            vertrag_soll = self._berechne_soll_stunden_nach_vertrag(eintraege[0].datum)
+            vertrag_soll = self._berechne_soll_stunden_nach_vertrag(
+                eintraege[0].datum, eintraege[0].mandant_id
+            )
         for zeile_nr, eintrag in enumerate(eintraege, start=1):
             if self._ist_ueberstunden_frei_zeitraum(eintrag):
                 eintrag.geleistete_stunden = time(0, 0, 0)
@@ -560,7 +662,9 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         if not eintraege:
             return
         if self._ist_krank_oder_urlaub_tag(eintraege[0]):
-            vertrag_soll = self._berechne_soll_stunden_nach_vertrag(eintraege[0].datum)
+            vertrag_soll = self._berechne_soll_stunden_nach_vertrag(
+                eintraege[0].datum, eintraege[0].mandant_id
+            )
             for i, eintrag in enumerate(eintraege):
                 if i == 0:
                     eintrag.soll_stunden_nach_vertrag = vertrag_soll
@@ -574,7 +678,7 @@ class ZeiteintragAnwendungDTO(ZeiteintragAnwendung):
         for i, eintrag in enumerate(eintraege):
             if i == 0:
                 eintrag.soll_stunden_nach_vertrag = self._berechne_soll_stunden_nach_vertrag(
-                    eintrag.datum
+                    eintrag.datum, eintrag.mandant_id
                 )
             else:
                 eintrag.soll_stunden_nach_vertrag = None

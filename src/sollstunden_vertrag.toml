@@ -1,0 +1,30 @@
+# Vertrags-Soll je Wochentag (Spalte „Vertrag“) — pro Mandant ein Eintrag.
+[[sollstunden_vertrag.vertrag]]
+mandant_id = 1
+effective_date = "2026-01-01"
+# discontinued_date optional: Zeile weglassen oder "" = kein Enddatum
+# discontinued_date = "2026-12-31"
+wochenstunden = [
+    { wochentag = 1, stunden = "4:00", name = "Montag" },
+    { wochentag = 2, stunden = "4:00", name = "Dienstag" },
+    { wochentag = 3, stunden = "4:00", name = "Mittwoch" },
+    { wochentag = 4, stunden = "4:00", name = "Donnerstag" },
+    { wochentag = 5, stunden = "0:00", name = "Freitag" },
+    { wochentag = 6, stunden = "0:00", name = "Samstag" },
+    { wochentag = 7, stunden = "0:00", name = "Sonntag" },
+]
+wochenstunden_summe = 16
+
+[[sollstunden_vertrag.vertrag]]
+mandant_id = 2
+effective_date = "2026-01-01"
+wochenstunden = [
+    { wochentag = 1, stunden = "0:00", name = "Montag" },
+    { wochentag = 2, stunden = "0:00", name = "Dienstag" },
+    { wochentag = 3, stunden = "0:00", name = "Mittwoch" },
+    { wochentag = 4, stunden = "0:00", name = "Donnerstag" },
+    { wochentag = 5, stunden = "4:00", name = "Freitag" },
+    { wochentag = 6, stunden = "0:00", name = "Samstag" },
+    { wochentag = 7, stunden = "0:00", name = "Sonntag" },
+]
+wochenstunden_summe = 4

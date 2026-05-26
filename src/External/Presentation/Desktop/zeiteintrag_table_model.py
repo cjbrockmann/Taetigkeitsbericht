@@ -48,7 +48,6 @@ from External.Presentation.Desktop.arbeitszeit_berechnung import (
     minuten_als_hh_mm,
     parse_uhrzeit_minuten,
 )
-from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
 from External.Presentation.Desktop.table_view_styles import (
     DIRTY_ROW_TEXT_COLOR,
     NORMAL_ROW_TEXT_COLOR,
@@ -226,7 +225,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
         self._rows: list[ZeiteintragRow] = []
         self._dirty_rows: set[int] = set()
         self._feiertag_nach_datum: dict[date, Feiertag] = {}
-        self._stundenplan_registry: StundenplanRegistry | None = None
         self._grauer_hintergrund_spalten = frozenset(grauer_hintergrund_spalten or ())
 
     @property
@@ -501,16 +499,6 @@ class ZeiteintragTableModel(QAbstractTableModel):
 
     def set_feiertag_nach_datum(self, mapping: dict[date, Feiertag]) -> None:
         self._feiertag_nach_datum = dict(mapping)
-
-    def set_stundenplan_registry(self, registry: StundenplanRegistry | None) -> None:
-        self._stundenplan_registry = registry
-
-    def stundenplan_soll_aktualisieren(self) -> None:
-        if not self._rows:
-            return
-        for r in range(len(self._rows)):
-            idx = self.index(r, ZeiteintragSpalte.SOLL)
-            self.dataChanged.emit(idx, idx, [Qt.DisplayRole])
 
     def feiertag_darstellung_aktualisieren(self) -> None:
         if not self._rows:

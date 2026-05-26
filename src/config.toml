@@ -7,11 +7,12 @@ version = "1.0.0"
 type = "sqlite"
 path = "taetigkeitsbericht.db"
 
-[mandanten] 
-mandanten = [
-    { name = "Bonifatius", id = 1, foreground_color = "#FFFFFF", background_color = "#5A62C8", rowcounter_color = "#0000AA" },
-    { name = "Frauenstein", id = 2, foreground_color = "#FFFFFF", background_color = "#C05858", rowcounter_color = "#AA0000" },
-]
+
+# Mandanten: siehe mandanten.toml
+
+# Vertrags-Soll: Erstimport aus sollstunden_vertrag.toml → DB (nur leere Tabelle)
+# sollstunden_vertrag_backup_erstellen: true → Backup + Platzhalter; false → TOML bleibt
+
 
 [sollstunden]
 sollstunden_an_feiertagen = false 
@@ -20,44 +21,15 @@ kommentar_krankheitstage = "K"
 kommentar_ueberstunden_frei = "Ü-Frei" 
 prefix_kommentar_feiertage = "F:"
 prefix_kommentar_betriebsferientage = "B:" 
+sollstunden_vertrag_backup_erstellen = false 
 
-# Vertrags-Soll je Wochentag (Spalte „Vertrag“) — pro Mandant eine Gruppe.
-[wochenstunden]
-wochenstunden_regel = 40
-wochenstunden_max = 48
-
+[kommentar]
 # kommentar_urlaub_krank_modus — Anzeige und Speicherung in der Kommentarspalte an Urlaubs-/Krankheitstagen (Mo–Fr mit Vertrags-Soll).
 # Zulaessige Werte: "praefix" | "kuerzel" (ungueltiger Wert → Standard "kuerzel").
 #   praefix — Kuerzel mit Doppelpunkt und optionalem Zusatz (z. B. „U: “ oder „K: mein Text“)
 #   kuerzel — nur das Kuerzel aus kommentar_urlaubstage / kommentar_krankheitstage (z. B. „U“ oder „K“)
 kommentar_urlaub_krank_modus = "kuerzel"
 # kommentar_urlaub_krank_modus = "praefix"
-
-[[wochenstunden.mandant]]
-mandant_id = 1
-wochenstunden = [
-    { wochentag = 1, stunden = "4:00", name = "Montag" },
-    { wochentag = 2, stunden = "4:00", name = "Dienstag" },
-    { wochentag = 3, stunden = "4:00", name = "Mittwoch" },
-    { wochentag = 4, stunden = "4:00", name = "Donnerstag" },
-    { wochentag = 5, stunden = "0:00", name = "Freitag" },
-    { wochentag = 6, stunden = "0:00", name = "Samstag" },
-    { wochentag = 7, stunden = "0:00", name = "Sonntag" },
-]
-wochenstunden_summe = 16
-
-[[wochenstunden.mandant]]
-mandant_id = 2
-wochenstunden = [
-    { wochentag = 1, stunden = "0:00", name = "Montag" },
-    { wochentag = 2, stunden = "0:00", name = "Dienstag" },
-    { wochentag = 3, stunden = "0:00", name = "Mittwoch" },
-    { wochentag = 4, stunden = "0:00", name = "Donnerstag" },
-    { wochentag = 5, stunden = "4:00", name = "Freitag" },
-    { wochentag = 6, stunden = "0:00", name = "Samstag" },
-    { wochentag = 7, stunden = "0:00", name = "Sonntag" },
-]
-wochenstunden_summe = 4
 
 
 
@@ -111,7 +83,7 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 #   - Zahl = Wert aus dieser Tabellenspalte (z. B. 0 Wochentag, 18 Kalendertag, 7 Von, 8 Bis, 16 Kommentar)
 #   - "blank" = diese Spalte beim Einfuegen nicht ueberschreiben (Formeln in Excel/Calc)
 #     Bei „blank“: zusaetzlich SpreadsheetML (ss:Index) fuer MS Excel; immer TSV fuer Calc.
-#     LibreOffice/OpenOffice Calc liest kein XML Spreadsheet — dort tab-getrennt einfügen.
+#     LibreOffice/OpenOffice Calc: nur TSV; leere Zellen im TSV als „ “ (kein Vorab-Löschen noetig).
 # Beispiel unten: Mo, Tag, Von…Bis/Pausen, [Geleistet], [Soll], Kommentar
 # include_header — true: erste Zeile mit den gleichen Spaltennamen wie im Modell.
 # leading_empty_columns / trailing_empty_columns — zusaetzliche leere Spalten am Rand jeder Zeile.
@@ -126,7 +98,7 @@ grauer_hintergrund_spalten = [2, 3, 4, 5, 6]
 include_header = false       # Beim Export nach Excel, Header miteinschliessen 
 leading_empty_columns = 0    # Beim Export nach Excel, leere Spalten am Anfang der Zeile
 trailing_empty_columns = 0   # Beim Export nach Excel, leere Spalten am Ende der Zeile
-spreadsheet_xml_formatierung = true  # false = nur TSV; true = TSV + Spreadsheet-XML (Excel Desktop)
+spreadsheet_xml_formatierung = false  # false = nur TSV; true = TSV + Spreadsheet-XML (Excel Desktop)
 datum_spalten = [1]    # Export nach Excel als Datum
 uhrzeit_spalten = [7, 8, 9, 10, 11, 12] # Export nach Excel als Zeit 
 integer_spalten = []   # Export nach Excel als Ganzzahl

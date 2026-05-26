@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QStackedLayout,
@@ -76,6 +77,7 @@ from External.Presentation.Desktop.hilfe import (
 )
 from External.Presentation.Desktop.message_boxes import frage_ja_nein, warnung
 from External.Presentation.Desktop.urlaubsantrag_view import UrlaubsantragView
+from External.Presentation.Desktop.zeiteintrag_formular import ZeiteintragFormularMonatsFuss
 from External.Presentation.Desktop.zeiteintrag_table_model import (
     STATUS_KENNZEICHEN_ICON_MAX_GROESSE,
     STATUS_KENNZEICHEN_ICON_MIN_GROESSE,
@@ -440,7 +442,7 @@ class ZeiteintragWindow(QMainWindow):
         self._mandant_pfeil_label.installEventFilter(self)
 
         for mandant in self._mandant_auswahl.mandanten:
-            self._mandant_combo.addItem(mandant.name, mandant.id)
+            self._mandant_combo.addItem(mandant.kuerzel, mandant.id)
             self._setze_mandant_combo_eintrag_farben_in_combo(
                 self._mandant_combo,
                 self._mandant_combo.count() - 1,
@@ -582,9 +584,6 @@ class ZeiteintragWindow(QMainWindow):
     def _synchronisiere_mandant_views(self, *, erstes_laden: bool) -> None:
         mandant_id = self._mandant_auswahl.mandant_id
         self._view_model.set_mandant_id(mandant_id)
-        wochenstunden = self._app_config.wochenstunden_pro_mandant.get(mandant_id)
-        if wochenstunden is not None:
-            self._view_model.apply_mandant_wochenstunden(wochenstunden)
         self._stundenplan_view.set_mandant_id(mandant_id)
         self._betriebsferien_view.set_mandant_id(mandant_id)
         if erstes_laden:
@@ -716,9 +715,38 @@ class ZeiteintragWindow(QMainWindow):
             self._table.setColumnHidden(spalte, True)
         self._aktualisiere_kommentar_breite()
         self._table.verticalHeader().setVisible(True)
+        self._table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._table.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self._table.verticalHeader().sectionResized.connect(
+            self._aktualisiere_scroll_inhalt_groesse
+        )
+
+        self._monats_fuss = ZeiteintragFormularMonatsFuss(zeiteintrag_widget)
+        self._ueberstunden_fuss = self._monats_fuss.ueberstunden
+        self._urlaub_fuss = self._monats_fuss.urlaub
+
+        self._scroll_inhalt = QWidget(zeiteintrag_widget)
+        scroll_inhalt_layout = QVBoxLayout(self._scroll_inhalt)
+        scroll_inhalt_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_inhalt_layout.setSpacing(0)
+        scroll_inhalt_layout.addWidget(self._table)
+        scroll_inhalt_layout.addWidget(self._monats_fuss)
+
+        self._table_scroll = QScrollArea(zeiteintrag_widget)
+        self._table_scroll.setWidget(self._scroll_inhalt)
+        self._table_scroll.setWidgetResizable(True)
+        self._table_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._table_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._table_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
 
         root_layout.addLayout(toolbar_layout)
-        root_layout.addWidget(self._table)
+        root_layout.addWidget(self._table_scroll, 1)
         fuss_rechts = QWidget(self)
         fuss_rechts_layout = QHBoxLayout(fuss_rechts)
         fuss_rechts_layout.setContentsMargins(0, 0, 0, 0)
@@ -834,10 +862,32 @@ class ZeiteintragWindow(QMainWindow):
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._aktualisiere_kommentar_breite()
+        self._aktualisiere_scroll_inhalt_groesse()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._aktualisiere_kommentar_breite()
+        self._aktualisiere_scroll_inhalt_groesse()
+
+    def _aktualisiere_scroll_inhalt_groesse(self) -> None:
+        model = self._table.model()
+        if model is None:
+            return
+        header_h = self._table.horizontalHeader().height()
+        zeilen_h = sum(self._table.rowHeight(row) for row in range(model.rowCount()))
+        rahmen = self._table.frameWidth() * 2
+        tabellen_h = header_h + zeilen_h + rahmen
+        self._table.setFixedHeight(max(tabellen_h, 0))
+
+        fuss_widget = self._scroll_inhalt.layout().itemAt(1).widget()
+        fuss_h = fuss_widget.sizeHint().height() if fuss_widget is not None else 0
+        self._scroll_inhalt.setMinimumHeight(tabellen_h + fuss_h)
+        # Breite nicht auf Spaltensumme setzen – sonst horizontaler Scrollbalken
+        # an der ScrollArea; die Tabelle nutzt bei Bedarf die eigene horizontale Leiste.
+
+    def _aktualisiere_monats_fuss_monat(self) -> None:
+        jahr, monat = self._selected_period()
+        self._ueberstunden_fuss.set_monat(jahr, monat)
 
     def _set_status_text(self, text: str) -> None:
         self._status_label.setText(text)
@@ -878,6 +928,12 @@ class ZeiteintragWindow(QMainWindow):
         self._summen_label.setText(
             f"Geleistet: {g_txt}   |   Soll nach Stundenplan: {s_txt}   |   Soll nach Vertrag: {sv_txt}"
         )
+        self._ueberstunden_fuss.set_stunden_summen(g_txt, s_txt, sv_txt)
+        monat = self._view_model.monat_mit_guthaben
+        if monat is not None:
+            self._ueberstunden_fuss.set_guthaben_verrechnung(monat.guthaben.verrechnung)
+        self._aktualisiere_monats_fuss_monat()
+        self._aktualisiere_scroll_inhalt_groesse()
 
     def _on_laden(self) -> None:
         if not self._confirm_discard_tab_changes(self._TAB_ZEITEINTRAEGE):
@@ -1154,6 +1210,7 @@ class ZeiteintragWindow(QMainWindow):
         self._has_unsaved_changes = False
         self._view_model.table_model.set_dirty_rows(set())
         self._reload_current_period(status_anzeigen=False)
+        self._aktualisiere_summen_anzeige()
 
     def _reload_current_period(self, *, status_anzeigen: bool = True) -> None:
         selected_year, selected_month = self._selected_period()

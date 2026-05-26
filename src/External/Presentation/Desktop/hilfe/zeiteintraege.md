@@ -13,13 +13,15 @@ Dieses Fenster dient der **monatlichen Erfassung** Ihrer Arbeitszeiten. Die Tabe
 
 ## Schaltflächen in der Werkzeugleiste
 
-| Aktion | Bedeutung |
-|--------|-----------|
-| **Zurücksetzen** | Lädt den aktuellen Monat erneut aus der Datenbank und **verwirft** alle noch nicht gespeicherten Änderungen in der Tabelle. Die Schaltfläche ist nur aktiv, wenn es **ungespeicherte** Änderungen gibt. Vor dem Ausführen erscheint eine Sicherheitsabfrage. |
-| **Für Excel kopieren** | Kopiert den Monat für Excel in die Zwischenablage (**vorgesehene Spalten und Formate**). Details siehe Abschnitt „Export nach Excel und Zwischenablage“. |
-| **Zeile hinzufügen** | Fügt am Ende der Tabelle eine neue Zeile ein (z. B. zweiter Arbeitsblock am selben Tag). |
-| **Markierte Zeile(n) löschen** | Löscht die ausgewählten Zeilen aus der Ansicht. **Erst nach „Alle Zeilen speichern“** werden Löschungen und andere Änderungen dauerhaft in der Datenbank gesichert. |
-| **Alle Zeilen speichern** | Speichert den **gesamten** Monat: neue Zeilen, Änderungen und Löschungen. Bei Erfolg erscheint eine kurze Meldung in der Statuszeile unten links. |
+
+| Aktion                         | Bedeutung                                                                                                                                                                                                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Zurücksetzen**               | Lädt den aktuellen Monat erneut aus der Datenbank und **verwirft** alle noch nicht gespeicherten Änderungen in der Tabelle. Die Schaltfläche ist nur aktiv, wenn es **ungespeicherte** Änderungen gibt. Vor dem Ausführen erscheint eine Sicherheitsabfrage. |
+| **Für Excel kopieren**         | Kopiert den Monat für Excel in die Zwischenablage (**vorgesehene Spalten und Formate**). Details siehe Abschnitt „Export nach Excel und Zwischenablage“.                                                                                                     |
+| **Zeile hinzufügen**           | Fügt am Ende der Tabelle eine neue Zeile ein (z. B. zweiter Arbeitsblock am selben Tag).                                                                                                                                                                     |
+| **Markierte Zeile(n) löschen** | Löscht die ausgewählten Zeilen aus der Ansicht. **Erst nach „Alle Zeilen speichern“** werden Löschungen und andere Änderungen dauerhaft in der Datenbank gesichert.                                                                                          |
+| **Alle Zeilen speichern**      | Speichert den **gesamten** Monat: neue Zeilen, Änderungen und Löschungen. Bei Erfolg erscheint eine kurze Meldung in der Statuszeile unten links.                                                                                                            |
+
 
 ---
 
@@ -43,7 +45,7 @@ Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zu
 - **Doppelklick auf die Zelle „Datum“** (nicht auf andere Spalten) einer Zeile übernimmt für diesen Tag und diese **Zeilenposition** die passende Vorlage aus dem Reiter **Stundenplan** (gleicher Wochentag, n-te Zeile am Tag entspricht dem n-ten Block im Stundenplan).
 - An **Feiertagen** ist diese Übernahme nicht vorgesehen.
 - Wenn im Stundenplan für diesen Wochentag **kein** passender Eintrag existiert oder die Zeile nicht zur „n-ten“ Zeile des Tages passt, passiert nichts.
-- Ist das **Kommentar**-Feld der Zeile noch leer, kann die **Anmerkung aus dem Stundenplan** übernommen werden – **nicht** bei `kommentar_urlaub_krank_modus = "kuerzel"` in `config.toml` (dann nur Zeiten/Pausen).
+- Ist das **Kommentar**-Feld der Zeile noch leer, kann die **Anmerkung aus dem Stundenplan** übernommen werden – **nicht** bei `[kommentar].kommentar_urlaub_krank_modus = "kuerzel"` in `config.toml` (dann nur Zeiten/Pausen).
 - Spalte **Info**: zeigt beim Laden den Stundenplan-Kommentar zur passenden Zeilenposition (Wochentag, n-te Zeile am Tag) – nur an Werktagen ohne Feiertag; wird **nicht** gespeichert (für späteren Excel-Export vorgesehen).
 
 ---
@@ -51,19 +53,18 @@ Zeilen mit **roter Schrift** sind **noch nicht gespeichert** oder weichen vom zu
 ## Export nach Excel und Zwischenablage
 
 - **Empfohlen:** Verwenden Sie die Schaltfläche **„Für Excel kopieren“** in der Werkzeugleiste. So landen **alle Tage des Monats** in der Zwischenablage in der **vorgesehenen Spaltenfolge** (laut `cell_spec` in `config.toml`) – unabhängig davon, welche Spalten in der Tabelle gerade sichtbar oder ausgeblendet sind. Anschließend in der Tabellenkalkulation **einfügen** (üblicherweise **Strg+V**).
-- **Strg+C** in der Tabelle kopiert nur den **aktuell markierten Zellbereich** wie in der Ansicht; Spaltenauswahl und Format entsprechen **nicht** dem Excel-Export. Nutzen Sie das höchstens für kurze Auszüge – für den Monats-Export sollten Sie **immer „Für Excel kopieren“** verwenden.
+- **Strg+C** in der Tabelle kopiert nur den **aktuell markierten Zellbereich** wie in der Ansicht; Spaltenauswahl und Format entsprechen **nicht** dem Excel-Export. Nutzen Sie Strg+C höchstens für kurze Auszüge – für den Monats-Export sollten Sie **immer „Für Excel kopieren“** verwenden.
+- Der Button **„Für Excel kopieren“** legt **immer tab-getrennten Text (TSV)** in die Zwischenablage; optional zusätzlich **Excel-XML** (`spreadsheet_xml_formatierung` in `config.toml`). **Leere exportierte Zellen** (ohne `"blank"`) werden im TSV als `**" "`** (Leerzeichen) ausgegeben – Calc und Excel überschreiben damit bestehende Inhalte an diesen Positionen beim Einfügen.
 
 ### LibreOffice / OpenOffice Calc
 
-Calc liest das spezielle Excel-Zwischenablageformat (**XML Spreadsheet**) beim Einfügen **nicht**. Es wird **tab-getrennter Text** eingefügt. Dabei bleiben in Calc oft **alte Zellinhalte** stehen, wenn die App für einen Tag **keinen** Wert liefert (z. B. leeres Wochenende) – Calc überschreibt solche Zellen beim Einfügen **nicht** mit „leer“.
+Calc liest das Excel-Zwischenablageformat (**XML Spreadsheet**) beim Einfügen **nicht**; es wird der **TSV** verwendet  (`spreadsheet_xml_formatierung = false`). Durch die `" "`**-Platzhalter** in leeren Spalten müssen Sie den Zielbereich **nicht mehr vorher löschen**: Markieren Sie die obere linke Zelle des Monatsblocks und fügen Sie mit **Strg+V** ein.
 
-**Praktischer Ablauf in Calc:** Markieren Sie in der Monatstabelle **zuerst genau den Bereich**, den Sie neu befüllen wollen (alle Zeilen und Spalten des Monats, die aus der App kommen sollen), **löschen** Sie diesen Bereich (Entf), und **fügen** Sie danach aus der Zwischenablage ein (**Strg+V**). So verschwinden alte Einträge an Tagen ohne neue Daten zuverlässig.
-
-Spalten mit **Formeln** in Ihrer Calc-Datei (z. B. Geleistet/Soll, in der Konfiguration als `"blank"` markiert) werden beim tab-getrennten Einfügen **mit erfasst**; schützen Sie sie ggf. durch die Auswahl beim Löschen/Einfügen oder stellen Sie Formeln danach wieder her.
+Spalten mit **Formeln** in Ihrer Calc-Datei (z. B. Geleistet/Soll, in `config.toml` als `"blank"` markiert) erscheinen im TSV **ohne** Wert und werden beim Einfügen **nicht** überschrieben – Ihre Formeln bleiben erhalten.
 
 ### Microsoft Excel
 
-Unter **Microsoft Excel** kann das Einfügen anders reagieren (u. a. über das Format **XML Spreadsheet**): Leere exportierte Felder werden dort oft **direkt** als leere Zellen übernommen, und in `config.toml` als `"blank"` gekennzeichnete Spalten sollen **nicht** überschrieben werden (Formeln bleiben erhalten). Ob Sie in Excel **denselben** Schritt „Bereich vorher löschen“ brauchen, hängt von Ihrer Vorlage ab – wenn nach dem Einfügen noch alte Werte an leeren Tagen stehen, löschen Sie den Zielbereich wie in Calc **vor** dem Einfügen und fügen Sie erneut ein.
+Bei **Microsoft Excel** kann zusätzlich **XML Spreadsheet** genutzt werden (`spreadsheet_xml_formatierung = true`): Dann bleiben `"blank"`-Spalten per `ss:Index` unangetastet (Formeln erhalten). Der TSV-Teil der Zwischenablage verhält sich wie in Calc (leere Felder als `" "`). Ein vorheriges Löschen des Bereichs ist in der Regel **nicht** nötig; nur wenn nach dem Einfügen noch unerwartete Restwerte stehen, Zielbereich leeren und erneut einfügen.
 
 ---
 
@@ -78,3 +79,4 @@ Unter **Microsoft Excel** kann das Einfügen anders reagieren (u. a. über das F
 
 - **Unten links** erscheinen kurze **Hinweise** (z. B. nach dem Speichern oder Kopieren). Die Meldung verschwindet nach einiger Zeit von selbst.
 - **Unten rechts** sehen Sie **Summen** für die geleistete Zeit sowie die Sollwerte nach Stundenplan und nach Vertrag für den **aktuell angezeigten Monat** (über alle sichtbaren Zeilen).
+

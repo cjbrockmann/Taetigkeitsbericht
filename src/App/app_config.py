@@ -1,10 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any, Final
 
 import tomllib
+
+from Core.Domain.models.models_worktime import SollstundenVertrag
+
+MANDANTEN_TOML = "mandanten.toml"
+SOLLSTUNDEN_VERTRAG_TOML = "sollstunden_vertrag.toml"
+SOLLSTUNDEN_VERTRAG_BACKUP_TOML = "sollstunden_vertrag_backup.toml"
+
+_WOCHENTAG_FELDER: Final[tuple[str, ...]] = (
+    "Montag",
+    "Dienstag",
+    "Mittwoch",
+    "Donnerstag",
+    "Freitag",
+    "Samstag",
+    "Sonntag",
+)
 
 DEFAULT_ZEITEINTRAG_EXCEL_UHRZEIT_SPALTEN: tuple[int, ...] = (7, 8, 9, 10, 11, 12)
 DEFAULT_ZEITEINTRAG_EXCEL_DATUM_SPALTEN: tuple[int, ...] = (1,)
@@ -142,19 +159,11 @@ def _parse_ausgeblendete_spalten(
 @dataclass(frozen=True)
 class Mandant:
     name: str
+    kuerzel: str
     id: int
     foreground_color: str = "#000000"
     background_color: str = "#FFFFFF"
     rowcounter_color: str = "#000000"
-
-
-@dataclass(frozen=True)
-class MandantWochenstunden:
-    """Vertrags-Soll je Wochentag und Summe — pro Mandant ([[wochenstunden.mandant]])."""
-
-    mandant_id: int
-    soll_nach_vertrag_nach_wochentag: dict[int, str] = field(default_factory=dict)
-    wochenstunden_summe: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -225,12 +234,18 @@ def _section_mandanten(data: dict[str, Any]) -> tuple[Mandant, ...]:
         if mandant_id in ids:
             raise ValueError(f"{pfad}: id {mandant_id} ist bereits vergeben.")
         ids.add(mandant_id)
+        name = str(eintrag["name"]).strip()
+        kuerzel_roh = eintrag.get("kuerzel", name)
+        kuerzel = str(kuerzel_roh).strip() if kuerzel_roh is not None else name
+        if not kuerzel:
+            raise ValueError(f"{pfad}: kuerzel darf nicht leer sein.")
         fg_roh = eintrag.get("foreground_color", eintrag.get("farbe", "#000000"))
         bg_roh = eintrag.get("background_color", eintrag.get("hintergrundfarbe", "#FFFFFF"))
         rc_roh = eintrag.get("rowcounter_color", eintrag.get("zeilenzaehlerfarbe", "#000000"))
         mandanten.append(
             Mandant(
-                name=str(eintrag["name"]).strip(),
+                name=name,
+                kuerzel=kuerzel,
                 id=mandant_id,
                 foreground_color=_parse_farbwert(fg_roh, f"{pfad}.foreground_color"),
                 background_color=_parse_farbwert(bg_roh, f"{pfad}.background_color"),
@@ -245,14 +260,12 @@ class AppConfig:
     name: str = "Taetigkeitsbericht"
     version: str = "0.0.0"
     mandanten: tuple[Mandant, ...] = ()
-    wochenstunden_pro_mandant: dict[int, MandantWochenstunden] = field(default_factory=dict)
-    wochenstunden_regel: float = 0.0
-    wochenstunden_max: float = 0.0
     sollstunden_an_feiertagen: bool = False
     kommentar_urlaubstage: str = ""
     kommentar_krankheitstage: str = ""
     kommentar_urlaub_krank_modus: str = DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
     kommentar_ueberstunden_frei: str = ""
+    sollstunden_vertrag_backup_erstellen: bool = False
     zeiteintrag_ausgeblendete_spalten: tuple[int, ...] = ()
     zeiteintrag_grauer_hintergrund_spalten: tuple[int, ...] = (
         DEFAULT_ZEITEINTRAG_GRAUER_HINTERGRUND_SPALTEN
@@ -380,13 +393,31 @@ def _section_stundenplan_tabelle(data: dict[str, Any]) -> tuple[int, ...]:
     )
 
 
+def _read_toml(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+    return data if isinstance(data, dict) else {}
+
+
+def _config_data_mit_zusatzdateien(config_path: Path) -> dict[str, Any]:
+    """Laedt config.toml und ueberlagert Abschnitte aus mandanten.toml."""
+    data = _read_toml(config_path)
+    basis = config_path.parent
+    mandanten = _read_toml(basis / MANDANTEN_TOML)
+    if "mandanten" in mandanten:
+        data = {**data, "mandanten": mandanten["mandanten"]}
+    return data
+
+
 def _sollstunden_section(data: dict[str, Any]) -> dict[str, Any]:
     sec = data.get("sollstunden")
     return sec if isinstance(sec, dict) else {}
 
 
-def _wochenstunden_section(data: dict[str, Any]) -> dict[str, Any]:
-    sec = data.get("wochenstunden")
+def _kommentar_section(data: dict[str, Any]) -> dict[str, Any]:
+    sec = data.get("kommentar")
     return sec if isinstance(sec, dict) else {}
 
 
@@ -405,12 +436,8 @@ def _section_kommentar_krankheitstage(data: dict[str, Any]) -> str:
 
 
 def _section_kommentar_urlaub_krank_modus(data: dict[str, Any]) -> str:
-    sec = _wochenstunden_section(data)
-    wert = sec.get(
-        "kommentar_urlaub_krank_modus",
-        _sollstunden_section(data).get(
-            "kommentar_urlaub_krank_modus", DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
-        ),
+    wert = _kommentar_section(data).get(
+        "kommentar_urlaub_krank_modus", DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
     )
     modus = str(wert).strip().lower() if wert is not None else DEFAULT_KOMMENTAR_URLAUB_KRANK_MODUS
     if modus == "prefix":
@@ -420,17 +447,16 @@ def _section_kommentar_urlaub_krank_modus(data: dict[str, Any]) -> str:
     return modus
 
 
-def _section_wochenstunden_regel(data: dict[str, Any]) -> float:
-    return float(_wochenstunden_section(data).get("wochenstunden_regel", 0) or 0)
-
-
-def _section_wochenstunden_max(data: dict[str, Any]) -> float:
-    return float(_wochenstunden_section(data).get("wochenstunden_max", 0) or 0)
-
-
 def _section_kommentar_ueberstunden_frei(data: dict[str, Any]) -> str:
     wert = _sollstunden_section(data).get("kommentar_ueberstunden_frei", "")
     return str(wert).strip() if wert is not None else ""
+
+
+def _section_sollstunden_vertrag_backup_erstellen(data: dict[str, Any]) -> bool:
+    return _parse_bool_wert(
+        _sollstunden_section(data).get("sollstunden_vertrag_backup_erstellen"),
+        default=False,
+    )
 
 
 def _parse_wochenstunden_liste(
@@ -449,82 +475,102 @@ def _parse_wochenstunden_liste(
     return out
 
 
-def _parse_mandant_wochenstunden_gruppe(
+def _parse_optional_datum(wert: Any, pfad: str) -> date | None:
+    if wert is None:
+        return None
+    text = str(wert).strip()
+    if not text:
+        return None
+    return date.fromisoformat(text)
+
+
+def _parse_sollstunden_vertrag_gruppe(
     eintrag: dict[str, Any], pfad: str
-) -> MandantWochenstunden:
-    if "mandant_id" not in eintrag:
-        raise ValueError(f"{pfad}: mandant_id ist Pflichtfeld.")
-    mandant_id = int(eintrag["mandant_id"])
+) -> SollstundenVertrag:
+    if "mandant_id" not in eintrag or "effective_date" not in eintrag:
+        raise ValueError(f"{pfad}: mandant_id und effective_date sind Pflichtfelder.")
     raw_liste = eintrag.get("wochenstunden")
     if not isinstance(raw_liste, list):
         raise TypeError(f"{pfad}.wochenstunden muss eine Liste sein.")
-    return MandantWochenstunden(
-        mandant_id=mandant_id,
-        soll_nach_vertrag_nach_wochentag=_parse_wochenstunden_liste(
-            raw_liste, f"{pfad}.wochenstunden"
+    mapping = _parse_wochenstunden_liste(raw_liste, f"{pfad}.wochenstunden")
+    stunden_nach_feld = {
+        feld: _hh_mm_zu_dezimalstunden(mapping.get(index, "00:00"))
+        for index, feld in enumerate(_WOCHENTAG_FELDER, start=1)
+    }
+    return SollstundenVertrag(
+        mandant_id=int(eintrag["mandant_id"]),
+        effective_date=_parse_optional_datum(eintrag["effective_date"], f"{pfad}.effective_date")
+        or date.today(),
+        discontinued_date=_parse_optional_datum(
+            eintrag.get("discontinued_date"), f"{pfad}.discontinued_date"
         ),
-        wochenstunden_summe=float(eintrag.get("wochenstunden_summe", 0) or 0),
+        **stunden_nach_feld,
     )
 
 
-def _section_wochenstunden_pro_mandant(
-    data: dict[str, Any], mandanten: tuple[Mandant, ...]
-) -> dict[int, MandantWochenstunden]:
-    sec = _wochenstunden_section(data)
-    gruppen = sec.get("mandant")
-    ergebnis: dict[int, MandantWochenstunden] = {}
+def _hh_mm_zu_dezimalstunden(hh_mm: str) -> float:
+    teile = hh_mm.strip().split(":", 1)
+    if len(teile) != 2:
+        raise ValueError(f"Ungueltiges Zeitformat: {hh_mm!r}")
+    h = int(teile[0])
+    m = int(teile[1])
+    return h + m / 60.0
 
-    if isinstance(gruppen, list):
-        ids: set[int] = set()
-        for idx, eintrag in enumerate(gruppen, start=1):
-            if not isinstance(eintrag, dict):
-                raise TypeError(f"wochenstunden.mandant[{idx}] muss eine Tabelle sein.")
-            config = _parse_mandant_wochenstunden_gruppe(
-                eintrag, f"wochenstunden.mandant[{idx}]"
-            )
-            if config.mandant_id in ids:
-                raise ValueError(
-                    f"wochenstunden.mandant[{idx}]: id {config.mandant_id} ist bereits vergeben."
-                )
-            ids.add(config.mandant_id)
-            ergebnis[config.mandant_id] = config
 
-    if not ergebnis:
-        legacy = _sollstunden_section(data).get("wochenstunden")
-        if isinstance(legacy, list) and mandanten:
-            mapping = _parse_wochenstunden_liste(legacy, "sollstunden.wochenstunden")
-            for mandant in mandanten:
-                ergebnis[mandant.id] = MandantWochenstunden(
-                    mandant_id=mandant.id,
-                    soll_nach_vertrag_nach_wochentag=dict(mapping),
-                )
+def vertrag_stunden_nach_wochentag(vertrag: SollstundenVertrag) -> dict[int, str]:
+    """Wochentag 1..7 → HH:MM fuer ZeiteintragAnwendungDTO."""
+    return {
+        index: _stunden_zu_hh_mm(getattr(vertrag, feld))
+        for index, feld in enumerate(_WOCHENTAG_FELDER, start=1)
+    }
 
-    return ergebnis
+
+def _vertrag_gruppen_aus_data(data: dict[str, Any]) -> list[Any]:
+    sec = data.get("sollstunden_vertrag")
+    if isinstance(sec, dict) and isinstance(sec.get("vertrag"), list):
+        return sec["vertrag"]
+    return []
+
+
+def load_sollstunden_vertraege_from_toml(path: Path) -> tuple[SollstundenVertrag, ...]:
+    """Liest [[sollstunden_vertrag.vertrag]] aus einer TOML-Datei (nur Erstimport)."""
+    return _section_sollstunden_vertraege(_read_toml(path))
+
+
+def _section_sollstunden_vertraege(data: dict[str, Any]) -> tuple[SollstundenVertrag, ...]:
+    gruppen = _vertrag_gruppen_aus_data(data)
+    vertraege: list[SollstundenVertrag] = []
+    for idx, eintrag in enumerate(gruppen, start=1):
+        if not isinstance(eintrag, dict):
+            raise TypeError(f"sollstunden_vertrag.vertrag[{idx}] muss eine Tabelle sein.")
+        vertraege.append(
+            _parse_sollstunden_vertrag_gruppe(eintrag, f"sollstunden_vertrag.vertrag[{idx}]")
+        )
+    return tuple(vertraege)
 
 
 def load_app_config(config_path: Path | None = None) -> AppConfig:
-    """Laedt src/config.toml (oder den angegebenen Pfad)."""
+    """Laedt src/config.toml und mandanten.toml (Vertraege: DB, Erstimport aus sollstunden_vertrag.toml)."""
     if config_path is None:
         config_path = Path(__file__).resolve().parents[1] / "config.toml"
     if not config_path.is_file():
         return AppConfig()
-    with config_path.open("rb") as f:
-        data = tomllib.load(f)
-    if not isinstance(data, dict):
+    data = _config_data_mit_zusatzdateien(config_path)
+    if not data:
         return AppConfig()
     mandanten = _section_mandanten(data)
     return AppConfig(
         name=str(data.get("name", "Taetigkeitsbericht")),
         version=str(data.get("version", "0.0.0")),
         mandanten=mandanten,
-        wochenstunden_pro_mandant=_section_wochenstunden_pro_mandant(data, mandanten),
-        wochenstunden_regel=_section_wochenstunden_regel(data),
-        wochenstunden_max=_section_wochenstunden_max(data),
         sollstunden_an_feiertagen=_section_sollstunden_an_feiertagen(data),
         kommentar_urlaubstage=_section_kommentar_urlaubstage(data),
         kommentar_krankheitstage=_section_kommentar_krankheitstage(data),
         kommentar_urlaub_krank_modus=_section_kommentar_urlaub_krank_modus(data),
         kommentar_ueberstunden_frei=_section_kommentar_ueberstunden_frei(data),
+        sollstunden_vertrag_backup_erstellen=_section_sollstunden_vertrag_backup_erstellen(
+            data
+        ),
         zeiteintrag_ausgeblendete_spalten=_section_zeiteintrag_ausgeblendete_spalten(data),
         zeiteintrag_grauer_hintergrund_spalten=_section_zeiteintrag_grauer_hintergrund_spalten(
             data

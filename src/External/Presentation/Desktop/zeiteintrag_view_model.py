@@ -13,11 +13,12 @@ from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Application.stundenplan_anwendung import StundenplanAnwendung
 from External.Presentation.Desktop.stundenplan_view_model import StundenplanViewModel
 from Core.Application.zeiteintrag_anwendung import ZeiteintragAnwendung
-from Core.Application.zeiteintrag_dto_anwendung import ZeiteintragAnwendungDTO
-from App.app_config import MandantWochenstunden
-from Core.Domain.models.models_worktime import Stundenplan, Zeiteintrag, ZeiteintragsDTO
-from External.Presentation.Desktop.feiertag_registry import FeiertagRegistry
-from External.Presentation.Desktop.stundenplan_registry import StundenplanRegistry
+from Core.Application.zeiteintrag_dto_anwendung import (
+    ZeiteintragAnwendungDTO,
+    ZeiteintragMonatMitGuthaben,
+)
+from Core.Domain.models.models_worktime import Feiertag, Stundenplan, Zeiteintrag, ZeiteintragsDTO
+from External.Presentation.Desktop.feiertag_view_model import FeiertagViewModel
 from External.Presentation.Desktop.arbeitszeit_berechnung import zeit_aus_text
 from External.Presentation.Desktop.stundenplan_table_model import StundenplanRow
 from External.Presentation.Desktop.zeiteintrag_table_model import (
@@ -37,31 +38,36 @@ class ZeiteintragViewModel(QObject):
         self,
         anwendung: ZeiteintragAnwendung,
         feiertag_anwendung: FeiertagAnwendung,
-        feiertag_registry: FeiertagRegistry,
         stundenplan_anwendung: StundenplanAnwendung,
-        stundenplan_registry: StundenplanRegistry,
+        feiertag_view_model: FeiertagViewModel | None = None,
         stundenplan_view_model: StundenplanViewModel | None = None,
         grauer_hintergrund_spalten: Sequence[int] | None = None,
     ) -> None:
         super().__init__()
         self._anwendung = anwendung
         self._feiertag_anwendung = feiertag_anwendung
-        self._feiertag_registry = feiertag_registry
         self._stundenplan_anwendung = stundenplan_anwendung
-        self._stundenplan_registry = stundenplan_registry
         self._stundenplan_view_model = stundenplan_view_model
         self._table_model = ZeiteintragTableModel(
             grauer_hintergrund_spalten=grauer_hintergrund_spalten
         )
-        self._table_model.set_stundenplan_registry(stundenplan_registry)
         self._suspend_anreicherung = False
         self._zu_loeschende_ids: list[UUID] = []
         self._geladenes_jahr: int | None = None
         self._geladenes_monat: int | None = None
         self._mandant_id: int | None = None
-        self._feiertag_registry.feiertage_geaendert.connect(self._auf_feiertage_geaendert)
-        self._stundenplan_registry.stundenplan_geaendert.connect(self._auf_stundenplan_geaendert)
+        self._monat_mit_guthaben: ZeiteintragMonatMitGuthaben | None = None
+        if feiertag_view_model is not None:
+            feiertag_view_model.feiertage_geaendert.connect(self._auf_feiertage_geaendert)
+        if stundenplan_view_model is not None:
+            stundenplan_view_model.stundenplan_geaendert.connect(
+                self._auf_stundenplan_geaendert
+            )
         self._table_model.dataChanged.connect(self._on_table_data_changed)
+
+    @property
+    def monat_mit_guthaben(self) -> ZeiteintragMonatMitGuthaben | None:
+        return self._monat_mit_guthaben
 
     @staticmethod
     def _ist_ueberstunden_platzhalter_row(row: ZeiteintragRow) -> bool:
@@ -139,12 +145,6 @@ class ZeiteintragViewModel(QObject):
             yield
         finally:
             self._suspend_anreicherung = vorher
-
-    def apply_mandant_wochenstunden(self, wochenstunden: MandantWochenstunden) -> None:
-        if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
-            self._anwendung.set_vertrag_stunden_nach_wochentag(
-                wochenstunden.soll_nach_vertrag_nach_wochentag
-            )
 
     def _aktuelle_mandant_id(self) -> int:
         if self._mandant_id is None:
@@ -244,23 +244,20 @@ class ZeiteintragViewModel(QObject):
     def lade_zeitraum(self, jahr: int, monat: int, *, status_anzeigen: bool = True) -> None:
         mandant_id = self._aktuelle_mandant_id()
         feiertage = self._feiertag_anwendung.liste(jahr=jahr)
-        self._feiertag_registry.aktualisiere_jahr(jahr, feiertage, benachrichtigen=False)
 
         stundenplan_eintraege = self._stundenplan_eintraege_fuer_soll()
-        if self._stundenplan_view_model is not None:
-            self._stundenplan_registry.aktualisiere_aus_zeilen(
-                self._stundenplan_view_model.table_model.rows,
-                benachrichtigen=False,
-            )
 
         if isinstance(self._anwendung, ZeiteintragAnwendungDTO):
-            eintraege = self._anwendung.liste_im_monat(
+            monat_mit_guthaben = self._anwendung.liste_im_monat_mit_guthaben(
                 mandant_id,
-                jahr=jahr,
-                monat=monat,
+                jahr,
+                monat,
                 stundenplan_eintraege=stundenplan_eintraege,
             )
+            self._monat_mit_guthaben = monat_mit_guthaben
+            eintraege = monat_mit_guthaben.eintraege
         else:
+            self._monat_mit_guthaben = None
             eintraege = self._anwendung.liste_im_monat(
                 mandant_id, jahr=jahr, monat=monat
             )
@@ -268,7 +265,7 @@ class ZeiteintragViewModel(QObject):
 
         self._table_model.set_rows(rows)
         self._table_model.set_feiertag_nach_datum(
-            self._feiertag_registry.snapshot_fuer_monat(jahr, monat)
+            self._feiertag_snapshot_fuer_monat(feiertage, jahr, monat)
         )
         self._geladenes_jahr = jahr
         self._geladenes_monat = monat
@@ -278,13 +275,25 @@ class ZeiteintragViewModel(QObject):
                 f"Anzeige aktualisiert: {len(rows)} Zeile(n) geladen"
             )
 
+    @staticmethod
+    def _feiertag_snapshot_fuer_monat(
+        eintraege: list[Feiertag], jahr: int, monat: int
+    ) -> dict[date, Feiertag]:
+        return {
+            eintrag.datum: eintrag
+            for eintrag in eintraege
+            if eintrag.datum.year == jahr and eintrag.datum.month == monat
+        }
+
     def _auf_feiertage_geaendert(self, jahr: int) -> None:
         if self._geladenes_jahr is None or self._geladenes_monat is None:
             return
         if jahr != self._geladenes_jahr:
             return
+        feiertage = self._feiertag_anwendung.liste(jahr=jahr)
         self._table_model.set_feiertag_nach_datum(
-            self._feiertag_registry.snapshot_fuer_monat(
+            self._feiertag_snapshot_fuer_monat(
+                feiertage,
                 self._geladenes_jahr,
                 self._geladenes_monat,
             )
@@ -455,11 +464,67 @@ class ZeiteintragViewModel(QObject):
 
         if fehler:
             self.error_occurred.emit("\n".join(fehler))
+        elif erfolgreich or geloescht:
+            self._persistiere_guthaben_nach_zeiteintrag_aenderungen(
+                gespeicherte_zeilen=zeilen_zum_speichern,
+            )
         status = f"{erfolgreich} Zeile(n) gespeichert, {geloescht} gelöscht."
         if fehler:
             status += f" {len(fehler)} Fehler."
         self.status_changed.emit(status)
         return not fehler
+
+    def _persistiere_guthaben_nach_zeiteintrag_aenderungen(
+        self,
+        *,
+        gespeicherte_zeilen: list[tuple[int, ZeiteintragRow]] | None = None,
+    ) -> None:
+        """Überstunden-Guthaben für betroffene Monate neu berechnen und in guthaben_stunden speichern."""
+        if not isinstance(self._anwendung, ZeiteintragAnwendungDTO):
+            return
+        monate: set[tuple[int, int]] = set()
+        if gespeicherte_zeilen:
+            for _, row in gespeicherte_zeilen:
+                text = getattr(row, "datum", "").strip()
+                if not text:
+                    continue
+                try:
+                    d = self._parse_date(text)
+                    monate.add((d.year, d.month))
+                except ValueError:
+                    continue
+        if self._geladenes_jahr is not None and self._geladenes_monat is not None:
+            monate.add((self._geladenes_jahr, self._geladenes_monat))
+        if not monate:
+            return
+
+        mandant_id = self._aktuelle_mandant_id()
+        stundenplan = self._stundenplan_eintraege_fuer_soll()
+        angezeigt = (
+            (self._geladenes_jahr, self._geladenes_monat)
+            if self._geladenes_jahr is not None and self._geladenes_monat is not None
+            else None
+        )
+        try:
+            for jahr, monat in sorted(monate):
+                if angezeigt == (jahr, monat):
+                    self._monat_mit_guthaben = self._anwendung.liste_im_monat_mit_guthaben(
+                        mandant_id,
+                        jahr,
+                        monat,
+                        stundenplan_eintraege=stundenplan,
+                    )
+                else:
+                    self._anwendung.aktualisiere_guthaben_im_monat(
+                        mandant_id,
+                        jahr,
+                        monat,
+                        stundenplan_eintraege=stundenplan,
+                    )
+        except Exception as exc:  # noqa: BLE001
+            self.error_occurred.emit(
+                f"Überstunden-Guthaben konnte nicht gespeichert werden: {exc}"
+            )
 
     @staticmethod
     def _parse_date(value: str) -> date:

@@ -6,22 +6,17 @@ from PySide6.QtCore import QObject, Signal
 
 from Core.Application.feiertag_anwendung import FeiertagAnwendung
 from Core.Domain.models.models_worktime import Feiertag
-from External.Presentation.Desktop.feiertag_registry import FeiertagRegistry
 from External.Presentation.Desktop.feiertag_table_model import FeiertagRow, FeiertagTableModel
 
 
 class FeiertagViewModel(QObject):
     status_changed = Signal(str)
     error_occurred = Signal(str)
+    feiertage_geaendert = Signal(int)
 
-    def __init__(
-        self,
-        anwendung: FeiertagAnwendung,
-        feiertag_registry: FeiertagRegistry,
-    ) -> None:
+    def __init__(self, anwendung: FeiertagAnwendung) -> None:
         super().__init__()
         self._anwendung = anwendung
-        self._feiertag_registry = feiertag_registry
         self._table_model = FeiertagTableModel()
         self._geladenes_jahr: int | None = None
 
@@ -32,7 +27,6 @@ class FeiertagViewModel(QObject):
     def lade_fuer_jahr(self, jahr: int) -> None:
         eintraege = self._anwendung.liste(jahr=jahr)
         self._geladenes_jahr = jahr
-        self._feiertag_registry.aktualisiere_jahr(jahr, eintraege, benachrichtigen=True)
         rows = [
             FeiertagRow(
                 datum=eintrag.datum.strftime("%d.%m.%Y"),
@@ -44,6 +38,7 @@ class FeiertagViewModel(QObject):
             for eintrag in eintraege
         ]
         self._table_model.set_rows(rows)
+        self.feiertage_geaendert.emit(jahr)
         self.status_changed.emit(f"{len(rows)} Feiertag(e) geladen.")
 
     def lade_aus_api_und_speichere(self, jahr: int) -> None:
@@ -94,11 +89,7 @@ class FeiertagViewModel(QObject):
             )
         )
         if self._geladenes_jahr is not None:
-            self._feiertag_registry.aktualisiere_jahr(
-                self._geladenes_jahr,
-                self._anwendung.liste(jahr=self._geladenes_jahr),
-                benachrichtigen=True,
-            )
+            self.feiertage_geaendert.emit(self._geladenes_jahr)
 
     def loesche_nach_datum(self, datum_text: str) -> bool:
         text_datum = datum_text.strip()
