@@ -5,6 +5,8 @@ Die Zeitaufschreibung erfolgt nach dem Muster **Clean Architecture**, damit Kern
 Das Programm soll sich die Feiertage aus einer bekannten JSON-Adresse von Google herunter laden können, 
 und die entsprechende Tage damit markieren.
 
+<p style="color:red"> Das Programm ist noch in der Entwicklungsphase</p>
+
 ## Präsentation
 
 Überblick über Funktionen und Oberflächen des Programms (Screenshots): **[Praesentation.ppt](./Praesentation.ppt)**.
