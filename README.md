@@ -39,8 +39,7 @@ Beschreibung der Sollstunden-Berechnung (nach Vertrag und nach Stundenplan), Kom
 
 ## Desktop-Frontend
 
-Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das die Zeitaufschreibung in eine SQLite-Datenbank speichert. 
-Zusätzlich soll ein Export der Stunden nach MS-Excel möglich sein. 
+Diese Anwendung soll eine plattformübergreifendes Desktop-Frontend ergeben, das die Zeitaufschreibung in eine SQLite-Datenbank speichert. Die Auswahl der Spalten, die nach Excel exportiert werden sollen, ist in einer zentralen Config-Datei einstellbar (config.toml). 
 
 ## Web-Frontend
 
