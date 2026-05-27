@@ -24,6 +24,9 @@ Die **Dependency Rule** bedeutet: Pfeile zeigen immer zur **Domain** — Present
 
 <img src="./Clean_Architecture.jpg" alt="Schichtenmodell: Domain, Application, Presentation, Persistence" width="490" height="487" />
 
+Die UI ist im Presentation Layer zwar im Schichtenmodell implementiert, aber nicht ganz im strengen Sinne nach Clean Architecture aufgebaut. Hierzu müsste man die UI per DI an den Application-Layer übergeben sollen, so dass alles von dort aus gesteuert wird. Vielleicht stelle ich das noch um. 
+
+
 ## Model
 
 Domain-Modelle (Felder, Validierung, DTO): siehe [readme_models.md](./readme_models.md).
