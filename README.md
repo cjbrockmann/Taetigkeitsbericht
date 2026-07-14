@@ -1,5 +1,7 @@
 # Tätigkeitsbericht
 
+**Dies ist ein Python-Projekt.**
+
 Die Zeitaufschreibung erfolgt nach dem Muster **Clean Architecture**, damit Kernlogik, Oberfläche und Datenbank getrennt bleiben und einzelne Teile wiederverwendbar sind.
 
 Das Programm soll sich die Feiertage aus einer bekannten JSON-Adresse von Google herunter laden können, 
