@@ -1,6 +1,6 @@
 # Tätigkeitsbericht
 
-**Dies ist ein Python-Projekt.**
+<strong style="color:blue">Dies ist ein Python-Projekt.</strong>
 
 Die Zeitaufschreibung erfolgt nach dem Muster **Clean Architecture**, damit Kernlogik, Oberfläche und Datenbank getrennt bleiben und einzelne Teile wiederverwendbar sind.
 
